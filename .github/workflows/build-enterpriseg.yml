@@ -1,0 +1,44 @@
+name: build-enterpriseg
+
+on:
+  workflow_run:
+    workflows: ["build"]
+    types:
+      - completed
+
+jobs:
+  build-enterpriseg:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download ISO artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: iso-artifacts
+
+      - name: List downloaded ISOs
+        run: |
+          Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso
+
+      - name: Copy EnterpriseG tool
+        run: |
+          Copy-Item -Recurse EnterpriseG iso-artifacts/EnterpriseG
+
+      - name: Convert all Pro ISOs to EnterpriseG
+        run: |
+          $isos = Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso
+          foreach ($iso in $isos) {
+            Write-Host "Converting $($iso.FullName) to EnterpriseG..."
+            & "iso-artifacts/EnterpriseG/EnterpriseG.exe" --input $iso.FullName --output ($iso.DirectoryName + "/" + $iso.BaseName + "-enterpriseg.iso") --config "iso-artifacts/EnterpriseG/options.json"
+          }
+
+      - name: Upload EnterpriseG ISOs
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterpriseg-iso
+          path: |
+            iso-artifacts/**/*.iso
+            !iso-artifacts/**/*.log
+            !iso-artifacts/EnterpriseG/** 
