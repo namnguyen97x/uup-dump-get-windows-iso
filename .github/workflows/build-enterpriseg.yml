@@ -31,7 +31,7 @@ jobs:
           $isos = Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso
           foreach ($iso in $isos) {
             Write-Host "Converting $($iso.FullName) to EnterpriseG..."
-            & "iso-artifacts/EnterpriseG/EnterpriseG.exe" --input $iso.FullName --output ($iso.DirectoryName + "/" + $iso.BaseName + "-enterpriseg.iso") --config "iso-artifacts/EnterpriseG/options.json"
+            powershell -ExecutionPolicy Bypass -File "iso-artifacts/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
           }
 
       - name: Upload EnterpriseG ISOs
