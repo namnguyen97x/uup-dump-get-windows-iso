@@ -133,9 +133,9 @@ if (-not $OutputIso) {
     $OutputIso = [System.IO.Path]::ChangeExtension($InputIso, '-EnterpriseG.iso')
 }
 Write-Host "[STEP] Building new ISO: $OutputIso"
-$Oscdimg = "$FilesDir\oscdimg\oscdimg.exe"
-$BootImg = "$FilesDir\oscdimg\etfsboot.com"
-$EfiImg = "$FilesDir\oscdimg\efisys.bin"
+$BootImg = Join-Path $FilesDir 'oscdimg\etfsboot.com'
+$EfiImg = Join-Path $FilesDir 'oscdimg\efisys.bin'
+$Oscdimg = Join-Path $FilesDir 'oscdimg\oscdimg.exe'
 
 # DEBUG: In đường dẫn các file boot sector
 Write-Host "[DEBUG] BootImg: $BootImg"
@@ -156,7 +156,7 @@ try {
     exit 1
 }
 
-& $Oscdimg -b$BootImg -u2 -h -m -lWIN_ENTG -bootdata:2#p0,e,b$BootImg#pEF,e,b$EfiImg "$IsoExtractDir" "$OutputIso"
+& "$Oscdimg" -b"$BootImg" -u2 -h -m -lWIN_ENTG -bootdata:2#p0,e,b"$BootImg"#pEF,e,b"$EfiImg" "$IsoExtractDir" "$OutputIso"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Failed to build ISO!" -ForegroundColor Red
     exit 1
