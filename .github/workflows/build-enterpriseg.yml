@@ -40,6 +40,7 @@ jobs:
           $repo = "${{ github.repository }}"
           $artifactsJson = gh api "repos/$repo/actions/runs/$run_id/artifacts"
           $artifactNames = ($artifactsJson | ConvertFrom-Json).artifacts | ForEach-Object { $_.name }
+          if ($artifactNames -is [string]) { $artifactNames = @($artifactNames) }
           $artifactNames | ConvertTo-Json | Set-Content artifacts.json
           echo "artifacts=$(Get-Content artifacts.json -Raw)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
