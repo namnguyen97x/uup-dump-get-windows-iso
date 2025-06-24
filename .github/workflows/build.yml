@@ -19,10 +19,20 @@ jobs:
         shell: pwsh
         run: |
           $content = Get-Content uup-dump-get-windows-iso.ps1 -Raw
-          $matches = [regex]::Matches($content, '^[ \t]*"([^"]+)"\s*=\s*@\{', [System.Text.RegularExpressions.RegexOptions]::Multiline)
-          $names = $matches | ForEach-Object { $_.Groups[1].Value }
+          # Lấy các dòng target không bị comment (không bắt đầu bằng # hoặc khoảng trắng + #)
+          $matches = [regex]::Matches($content, '^[ \t]*"([^\"]+)"\s*=\s*@\{', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+          $lines = $content -split "`n"
+          $activeTargets = @()
+          foreach ($m in $matches) {
+            $target = $m.Groups[1].Value
+            # Tìm dòng chứa target này
+            $line = $lines | Where-Object { $_ -match "\"$target\"\s*=\s*@\{" }
+            if ($line -and ($line -notmatch '^[ \t]*#')) {
+              $activeTargets += $target
+            }
+          }
           $json = @{ include = @() }
-          foreach ($name in $names) { $json.include += @{ name = $name } }
+          foreach ($name in $activeTargets) { $json.include += @{ name = $name } }
           $matrix = $json | ConvertTo-Json -Compress
           echo "matrix=$matrix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
