@@ -22,19 +22,19 @@ $TARGETS = @{
         edition = "Professional"
         virtualEdition = $null
     }
-    "windows-11-24h2" = @{
-        # Windows 11, version 24H2 (26100.4482) amd64, Professional/Enterprise
-        # UUP dump link: https://uupdump.net/download.php?id=a65e5849-be58-42a1-aa4d-9a85f2b8c158&pack=en-us&edition=professional
-        search = "windows 11 26100 amd64" # 24H2
-        edition = "Professional"
-        virtualEdition = $null
-    }
-    # see https://en.wikipedia.org/wiki/Windows_Server_2022
-    "windows-2022" = @{
-        search = "feature update server operating system 20348 amd64" # aka 21H2. Mainstream EOL: October 13, 2026.
-        edition = "ServerStandard"
-        virtualEdition = $null
-    }
+    # "windows-11-24h2" = @{
+    #     # Windows 11, version 24H2 (26100.4482) amd64, Professional/Enterprise
+    #     # UUP dump link: https://uupdump.net/download.php?id=a65e5849-be58-42a1-aa4d-9a85f2b8c158&pack=en-us&edition=professional
+    #     search = "windows 11 26100 amd64" # 24H2
+    #     edition = "Professional"
+    #     virtualEdition = $null
+    # }
+    # # see https://en.wikipedia.org/wiki/Windows_Server_2022
+    # "windows-2022" = @{
+    #     search = "feature update server operating system 20348 amd64" # aka 21H2. Mainstream EOL: October 13, 2026.
+    #     edition = "ServerStandard"
+    #     virtualEdition = $null
+    # }
 }
 
 function New-QueryString([hashtable]$parameters) {
