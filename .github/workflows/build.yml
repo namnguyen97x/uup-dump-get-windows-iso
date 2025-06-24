@@ -1,11 +1,13 @@
 name: build
+
 on:
   workflow_dispatch:
   schedule:
     #- cron: '0 * * * *' # hourly.
     - cron: '0 0 17 * *' # every month, the 17th day.
+
 jobs:
-  build:
+  parse-matrix:
     runs-on: windows-2022
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -23,8 +25,12 @@ jobs:
           foreach ($name in $names) { $json.include += @{ name = $name } }
           $matrix = $json | ConvertTo-Json -Compress
           echo "matrix=$matrix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+  build:
+    needs: parse-matrix
+    runs-on: windows-2022
     strategy:
-      matrix: ${{ fromJson(needs.build.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.parse-matrix.outputs.matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
