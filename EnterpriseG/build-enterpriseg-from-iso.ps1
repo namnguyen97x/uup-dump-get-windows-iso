@@ -22,6 +22,13 @@ Write-Host "[INFO] Temp directory: $TempDir"
 New-Item -ItemType Directory -Force -Path $IsoExtractDir | Out-Null
 & "$FilesDir\7z.exe" x $InputIso -o"$IsoExtractDir" -y | Out-Null
 
+# 1b. Copy autounattend.xml vào thư mục gốc ISO nếu có file mẫu
+$AutoUnattend = Join-Path $FilesDir 'autounattend.xml'
+if (Test-Path $AutoUnattend) {
+    Copy-Item $AutoUnattend -Destination $IsoExtractDir -Force
+    Write-Host "[STEP] Copied autounattend.xml to ISO root."
+}
+
 # 2. Find install.wim
 $WimPath = Get-ChildItem -Path "$IsoExtractDir\sources" -Filter "install.wim" | Select-Object -First 1
 if (-not $WimPath) { Write-Host "[ERROR] install.wim not found in ISO!"; exit 1 }
@@ -34,53 +41,53 @@ dism /Mount-Wim /WimFile:"$($WimPath.FullName)" /Index:1 /MountDir:"$MountDir" |
 # 4. Patch/debloat/convert EnterpriseG (Fox Khang style)
 # --- Debloat: Remove Edge, OneDrive, Copilot, Media Player, ...
 Write-Host "[STEP] Debloating..."
-Remove-Item "$MountDir\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Program Files\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.MicrosoftEdge_8wekyb3d8bbwe" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.ZuneMusic_8wekyb3d8bbwe" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.ZuneVideo_8wekyb3d8bbwe" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Program Files (x86)\Microsoft OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Program Files\Microsoft OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Users\Default\AppData\Local\Microsoft\OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\System32\OneDriveSetup.exe" -Force -ErrorAction SilentlyContinue
-# Debloat bổ sung từ Fox Khang
-Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.Copilot_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.AksMsixvc_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ParentalControls_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.XGpuEjectDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecHealthUI_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ShellExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.XGpuEjectDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CallingShellApp_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.Cortana_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.NarratorQuickStart_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkCaptivePortal_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkConnectionFlow_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ParentalControls_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.PinningConfirmationDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecHealthUI_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ShellExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.XGpuEjectDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CallingShellApp_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.Cortana_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.NarratorQuickStart_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkCaptivePortal_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkConnectionFlow_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+
+# Remove AppX/Provisioned Packages triệt để
+$AppxPatterns = @(
+    "Microsoft.MicrosoftEdge",
+    "Microsoft.Windows.Copilot",
+    "Microsoft.Windows.Cortana",
+    "Microsoft.Clipchamp",
+    "Microsoft.WindowsCamera"
+)
+foreach ($pattern in $AppxPatterns) {
+    $provisioned = Get-AppxProvisionedPackage -Path $MountDir | Where-Object DisplayName -Match $pattern
+    foreach ($pkg in $provisioned) {
+        Write-Host "[DEBLOAT] Removing AppX: $($pkg.DisplayName)"
+        try {
+            Remove-AppxProvisionedPackage -Path $MountDir -PackageName $pkg.PackageName -ErrorAction Stop
+        } catch {
+            Write-Host "[WARN] Failed to remove AppX: $($pkg.DisplayName)" -ForegroundColor Yellow
+        }
+    }
+}
+
+# Remove các folder/app truyền thống, log cảnh báo nếu không xóa được
+$DebloatFolders = @(
+    "$MountDir\Program Files (x86)\Microsoft\Edge",
+    "$MountDir\Program Files\Microsoft\Edge",
+    "$MountDir\Windows\SystemApps\Microsoft.MicrosoftEdge_8wekyb3d8bbwe",
+    "$MountDir\Windows\SystemApps\Microsoft.ZuneMusic_8wekyb3d8bbwe",
+    "$MountDir\Windows\SystemApps\Microsoft.ZuneVideo_8wekyb3d8bbwe",
+    "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy",
+    "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy",
+    "$MountDir\Program Files (x86)\Microsoft OneDrive",
+    "$MountDir\Program Files\Microsoft OneDrive",
+    "$MountDir\Users\Default\AppData\Local\Microsoft\OneDrive",
+    "$MountDir\Windows\System32\OneDriveSetup.exe"
+)
+foreach ($folder in $DebloatFolders) {
+    if (Test-Path $folder) {
+        try {
+            Remove-Item $folder -Recurse -Force -ErrorAction Stop
+            Write-Host "[DEBLOAT] Removed: $folder"
+        } catch {
+            Write-Host "[WARN] Failed to remove: $folder" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[INFO] Not found (skip): $folder"
+    }
+}
 Write-Host "[STEP] Debloat done."
 
 # --- Patch registry: bypass, OOBE, branding, ...
@@ -132,6 +139,32 @@ reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartu
 reg unload HKLM\TMP
 Write-Host "[STEP] Registry patched."
 
+# 4b. Tạo file bypass.reg và chèn vào Scripts nếu chưa có
+$BypassRegPath = Join-Path $FilesDir 'Scripts\bypass.reg'
+if (!(Test-Path $BypassRegPath)) {
+    @"
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SYSTEM\Setup\OOBE]
+"BypassNRO"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE]
+"BypassNRO"=dword:00000001
+"SkipMachineOOBE"=dword:00000001
+"SkipUserOOBE"=dword:00000001
+"@ | Set-Content -Encoding ASCII $BypassRegPath
+    Write-Host "[STEP] Created bypass.reg in Scripts."
+}
+# Đảm bảo SetupComplete.cmd import bypass.reg
+$SetupComplete = Join-Path $FilesDir 'Scripts\SetupComplete.cmd'
+if (Test-Path $SetupComplete) {
+    $setupContent = Get-Content $SetupComplete -Raw
+    if ($setupContent -notmatch 'reg import "%~dp0bypass.reg"') {
+        Add-Content $SetupComplete "`r`nreg import \"%~dp0bypass.reg\""
+        Write-Host "[STEP] Patched SetupComplete.cmd to import bypass.reg."
+    }
+}
+
 # 5. Unmount and commit changes to WIM
 Write-Host "[STEP] Committing changes to install.wim..."
 dism /Unmount-Wim /MountDir:"$MountDir" /Commit | Out-Null
@@ -152,7 +185,15 @@ Write-Host "[STEP] Building new ISO: $OutputIso"
 $Oscdimg = "$FilesDir\oscdimg\oscdimg.exe"
 $BootImg = "$FilesDir\oscdimg\etfsboot.com"
 $EfiImg = "$FilesDir\oscdimg\efisys.bin"
+if (!(Test-Path $BootImg) -or !(Test-Path $EfiImg)) {
+    Write-Host "[ERROR] Boot sector files missing!" -ForegroundColor Red
+    exit 1
+}
 & $Oscdimg -b$BootImg -u2 -h -m -lWIN_ENTG -bootdata:2#p0,e,b$BootImg#pEF,e,b$EfiImg "$IsoExtractDir" "$OutputIso"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Failed to build ISO!" -ForegroundColor Red
+    exit 1
+}
 Write-Host "[STEP] ISO created: $OutputIso"
 
 # 7. Clean up
