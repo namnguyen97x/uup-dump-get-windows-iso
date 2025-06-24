@@ -58,8 +58,10 @@ jobs:
             }
             $iso = Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso | Select-Object -First 1
             if ($null -eq $iso) { throw "No ISO found in artifact $artifact!" }
+            $isoDir = Split-Path $iso.FullName -Parent
+            Copy-Item -Recurse EnterpriseG "$isoDir/EnterpriseG"
             Write-Host "[INFO] Converting $($iso.FullName) to EnterpriseG..."
-            powershell -ExecutionPolicy Bypass -File "iso-artifacts/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
+            powershell -ExecutionPolicy Bypass -File "$isoDir/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
           }
 
       - name: Debug list files
@@ -70,10 +72,6 @@ jobs:
       - name: List downloaded ISOs
         run: |
           Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso
-
-      - name: Copy EnterpriseG tool
-        run: |
-          Copy-Item -Recurse EnterpriseG iso-artifacts/EnterpriseG
 
       - name: Upload EnterpriseG ISO
         uses: actions/upload-artifact@v4
