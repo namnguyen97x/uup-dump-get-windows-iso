@@ -37,9 +37,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $run_id = "${{ steps.parse.outputs.run_id }}"
-          $artifacts = gh run view $run_id --json artifacts -q ".artifacts[].name"
-          $artifacts = $artifacts -split "`n"
-          $artifacts | ConvertTo-Json | Set-Content artifacts.json
+          $repo = "${{ github.repository }}"
+          $artifactsJson = gh api "repos/$repo/actions/runs/$run_id/artifacts"
+          $artifactNames = ($artifactsJson | ConvertFrom-Json).artifacts | ForEach-Object { $_.name }
+          $artifactNames | ConvertTo-Json | Set-Content artifacts.json
           echo "artifacts=$(Get-Content artifacts.json -Raw)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Download and convert all ISOs to EnterpriseG
