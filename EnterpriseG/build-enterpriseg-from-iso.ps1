@@ -33,22 +33,60 @@ if (Test-Path $AutoUnattend) {
 $WimPath = Get-ChildItem -Path "$IsoExtractDir\sources" -Filter "install.wim" | Select-Object -First 1
 if (-not $WimPath) { Write-Host "[ERROR] install.wim not found in ISO!"; exit 1 }
 
+# Kiểm tra số lượng index trong install.wim
+$WimInfo = dism /Get-WimInfo /WimFile:"$($WimPath.FullName)" | Out-String
+$Indexes = ($WimInfo -split "Index : ") | Where-Object { $_ -match "^\d+" } | ForEach-Object { ($_ -split "\r?\n")[0].Trim() }
+if ($Indexes.Count -gt 1) {
+    Write-Host "[INFO] install.wim có nhiều index: $($Indexes -join ", ")"
+    $TargetIndex = 1 # Có thể sửa thành tham số đầu vào nếu muốn chọn index khác
+    Write-Host "[INFO] Sẽ debloat index: $TargetIndex"
+} else {
+    $TargetIndex = 1
+}
+
 # 3. Mount WIM
 New-Item -ItemType Directory -Force -Path $MountDir | Out-Null
 Write-Host "[STEP] Mounting install.wim..."
-dism /Mount-Wim /WimFile:"$($WimPath.FullName)" /Index:1 /MountDir:"$MountDir" | Out-Null
+dism /Mount-Wim /WimFile:"$($WimPath.FullName)" /Index:$TargetIndex /MountDir:"$MountDir" | Out-Null
+if (!(Test-Path $MountDir)) {
+    Write-Host "[ERROR] Mount WIM failed!" -ForegroundColor Red
+    exit 1
+}
 
 # 4. Patch/debloat/convert EnterpriseG (Fox Khang style)
 # --- Debloat: Remove Edge, OneDrive, Copilot, Media Player, ...
 Write-Host "[STEP] Debloating..."
 
-# Remove AppX/Provisioned Packages triệt để
+# Remove AppX/Provisioned Packages triệt để (bổ sung thêm app phổ biến)
 $AppxPatterns = @(
     "Microsoft.MicrosoftEdge",
     "Microsoft.Windows.Copilot",
     "Microsoft.Windows.Cortana",
     "Microsoft.Clipchamp",
-    "Microsoft.WindowsCamera"
+    "Microsoft.WindowsCamera",
+    "Microsoft.BingNews",
+    "Microsoft.GetHelp",
+    "Microsoft.Getstarted",
+    "Microsoft.MicrosoftOfficeHub",
+    "Microsoft.MicrosoftSolitaireCollection",
+    "Microsoft.MicrosoftStickyNotes",
+    "Microsoft.OneConnect",
+    "Microsoft.People",
+    "Microsoft.SkypeApp",
+    "Microsoft.Todos",
+    "Microsoft.WindowsAlarms",
+    "Microsoft.WindowsFeedbackHub",
+    "Microsoft.WindowsMaps",
+    "Microsoft.WindowsSoundRecorder",
+    "Microsoft.Xbox.TCUI",
+    "Microsoft.XboxApp",
+    "Microsoft.XboxGameOverlay",
+    "Microsoft.XboxGamingOverlay",
+    "Microsoft.XboxIdentityProvider",
+    "Microsoft.XboxSpeechToTextOverlay",
+    "Microsoft.YourPhone",
+    "Microsoft.ZuneMusic",
+    "Microsoft.ZuneVideo"
 )
 foreach ($pattern in $AppxPatterns) {
     $provisioned = Get-AppxProvisionedPackage -Path $MountDir | Where-Object DisplayName -Match $pattern
@@ -168,6 +206,10 @@ if (Test-Path $SetupComplete) {
 # 5. Unmount and commit changes to WIM
 Write-Host "[STEP] Committing changes to install.wim..."
 dism /Unmount-Wim /MountDir:"$MountDir" /Commit | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] Commit WIM failed!" -ForegroundColor Red
+    exit 1
+}
 Write-Host "[STEP] Unmounted and committed install.wim."
 
 # 5b. Optimize WIM và set image property
