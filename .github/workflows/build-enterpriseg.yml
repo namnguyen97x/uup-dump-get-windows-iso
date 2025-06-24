@@ -31,25 +31,13 @@ jobs:
             exit 1
           }
 
-      - name: Download windows-11 artifact
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh run download ${{ steps.parse.outputs.run_id }} -n windows-11 -D iso-artifacts
-
       - name: Download windows-11-24h2 artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh run download ${{ steps.parse.outputs.run_id }} -n windows-11-24h2 -D iso-artifacts
 
-      - name: Download windows-2022 artifact
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh run download ${{ steps.parse.outputs.run_id }} -n windows-2022 -D iso-artifacts
-
-      - name: Unzip all artifacts
+      - name: Unzip artifact
         shell: pwsh
         run: |
           Get-ChildItem -Path iso-artifacts -Filter *.zip -Recurse | ForEach-Object {
@@ -69,15 +57,14 @@ jobs:
         run: |
           Copy-Item -Recurse EnterpriseG iso-artifacts/EnterpriseG
 
-      - name: Convert all Pro ISOs to EnterpriseG
+      - name: Convert Pro ISO to EnterpriseG
         run: |
-          $isos = Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso
-          foreach ($iso in $isos) {
-            Write-Host "Converting $($iso.FullName) to EnterpriseG..."
-            powershell -ExecutionPolicy Bypass -File "iso-artifacts/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
-          }
+          $iso = Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso | Select-Object -First 1
+          if ($null -eq $iso) { throw 'No ISO found!' }
+          Write-Host "Converting $($iso.FullName) to EnterpriseG..."
+          powershell -ExecutionPolicy Bypass -File "iso-artifacts/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
 
-      - name: Upload EnterpriseG ISOs
+      - name: Upload EnterpriseG ISO
         uses: actions/upload-artifact@v4
         with:
           name: enterpriseg-iso
