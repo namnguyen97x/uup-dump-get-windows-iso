@@ -42,6 +42,23 @@ Copy-Item "$FilesDir\regedit.reg" $SetupScripts -Force
 Copy-Item "$FilesDir\bypass.reg" $SetupScripts -Force
 Write-Host "[STEP 3] Scripts copied"
 
+# Patch registry trực tiếp vào image để bypass check, debloat, OOBE, SKU
+# Patch SYSTEM hive (bypass.reg)
+reg load HKLM\TMP "$MountDir\Windows\System32\config\SYSTEM"
+reg import "$SetupScripts\bypass.reg"
+# Patch OOBE bypass vào SYSTEM
+reg add "HKLM\TMP\Setup\OOBE" /v BypassNRO /t REG_DWORD /d 1 /f
+reg unload HKLM\TMP
+
+# Patch SOFTWARE hive (OOBE, debloat, SKU, branding)
+reg load HKLM\TMP "$MountDir\Windows\System32\config\SOFTWARE"
+reg add "HKLM\TMP\Microsoft\Windows\CurrentVersion\OOBE" /v BypassNRO /t REG_DWORD /d 1 /f
+reg add "HKLM\TMP\Microsoft\Windows\CurrentVersion\OOBE" /v SkipMachineOOBE /t REG_DWORD /d 1 /f
+reg add "HKLM\TMP\Microsoft\Windows\CurrentVersion\OOBE" /v SkipUserOOBE /t REG_DWORD /d 1 /f
+# Patch branding nếu cần
+reg add "HKLM\TMP\Microsoft\Windows NT\CurrentVersion" /v RegisteredOrganization /t REG_SZ /d "Produced by iamkudo" /f
+reg unload HKLM\TMP
+
 # 3b. Remove unwanted apps (Edge, Media Player, Copilot, OneDrive)
 Write-Host "[STEP 3b] Removing Edge, Media Player, Copilot, OneDrive..."
 Remove-Item "$MountDir\Program Files (x86)\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
