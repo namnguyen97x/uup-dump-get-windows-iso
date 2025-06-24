@@ -31,17 +31,33 @@ jobs:
             exit 1
           }
 
-      - name: Download windows-11-24h2 artifact
+      - name: List artifacts from build run
+        id: artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh run download ${{ steps.parse.outputs.run_id }} -n windows-11-24h2 -D iso-artifacts
+          $run_id = "${{ steps.parse.outputs.run_id }}"
+          $artifacts = gh run view $run_id --json artifacts -q ".artifacts[].name"
+          $artifacts = $artifacts -split "`n"
+          $artifacts | ConvertTo-Json | Set-Content artifacts.json
+          echo "artifacts=$(Get-Content artifacts.json -Raw)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Unzip artifact
+      - name: Download and convert all ISOs to EnterpriseG
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          Get-ChildItem -Path iso-artifacts -Filter *.zip -Recurse | ForEach-Object {
-            Expand-Archive -Path $_.FullName -DestinationPath (Split-Path $_.FullName -Parent)
+          $artifacts = ConvertFrom-Json '${{ steps.artifacts.outputs.artifacts }}'
+          foreach ($artifact in $artifacts) {
+            Write-Host "[INFO] Downloading artifact: $artifact"
+            gh run download ${{ steps.parse.outputs.run_id }} -n $artifact -D iso-artifacts
+            Get-ChildItem -Path iso-artifacts -Filter *.zip -Recurse | ForEach-Object {
+              Expand-Archive -Path $_.FullName -DestinationPath (Split-Path $_.FullName -Parent)
+            }
+            $iso = Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso | Select-Object -First 1
+            if ($null -eq $iso) { throw "No ISO found in artifact $artifact!" }
+            Write-Host "[INFO] Converting $($iso.FullName) to EnterpriseG..."
+            powershell -ExecutionPolicy Bypass -File "iso-artifacts/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
           }
 
       - name: Debug list files
@@ -56,13 +72,6 @@ jobs:
       - name: Copy EnterpriseG tool
         run: |
           Copy-Item -Recurse EnterpriseG iso-artifacts/EnterpriseG
-
-      - name: Convert Pro ISO to EnterpriseG
-        run: |
-          $iso = Get-ChildItem -Path iso-artifacts -Recurse -Filter *.iso | Select-Object -First 1
-          if ($null -eq $iso) { throw 'No ISO found!' }
-          Write-Host "Converting $($iso.FullName) to EnterpriseG..."
-          powershell -ExecutionPolicy Bypass -File "iso-artifacts/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
 
       - name: Upload EnterpriseG ISO
         uses: actions/upload-artifact@v4
