@@ -61,7 +61,7 @@ jobs:
             $isoDir = Split-Path $iso.FullName -Parent
             Copy-Item -Recurse EnterpriseG "$isoDir/EnterpriseG"
             Write-Host "[INFO] Converting $($iso.FullName) to EnterpriseG..."
-            powershell -ExecutionPolicy Bypass -File "$isoDir/EnterpriseG/convert-to-enterpriseg.ps1" -InputIso $iso.FullName
+            powershell -ExecutionPolicy Bypass -File "$isoDir/EnterpriseG/build-enterpriseg-from-iso.ps1" -InputIso $iso.FullName
           }
 
       - name: Debug list files
