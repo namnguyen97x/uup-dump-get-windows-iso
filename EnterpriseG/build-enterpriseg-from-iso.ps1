@@ -156,6 +156,13 @@ try {
     exit 1
 }
 
+# Trước khi build ISO, xóa mọi file ISO gốc khỏi thư mục build nếu có
+$isoInExtract = Get-ChildItem -Path $IsoExtractDir -Filter *.iso -Recurse
+foreach ($f in $isoInExtract) {
+    Write-Host "[CLEANUP] Removing ISO file from build dir: $($f.FullName)"
+    Remove-Item $f.FullName -Force
+}
+
 & "$Oscdimg" -b"$BootImg" -u2 -h -m -lWIN_ENTG -bootdata:2#p0,e,b"$BootImg"#pEF,e,b"$EfiImg" "$IsoExtractDir" "$OutputIso"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Failed to build ISO!" -ForegroundColor Red
