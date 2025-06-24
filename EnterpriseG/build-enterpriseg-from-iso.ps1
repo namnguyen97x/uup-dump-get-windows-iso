@@ -45,6 +45,42 @@ Remove-Item "$MountDir\Program Files (x86)\Microsoft OneDrive" -Recurse -Force -
 Remove-Item "$MountDir\Program Files\Microsoft OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "$MountDir\Users\Default\AppData\Local\Microsoft\OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "$MountDir\Windows\System32\OneDriveSetup.exe" -Force -ErrorAction SilentlyContinue
+# Debloat bổ sung từ Fox Khang
+Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.CBS_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.Copilot_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.AksMsixvc_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ParentalControls_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.XGpuEjectDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecHealthUI_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ShellExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.XGpuEjectDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CallingShellApp_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.Cortana_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.NarratorQuickStart_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkCaptivePortal_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkConnectionFlow_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ParentalControls_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.PinningConfirmationDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecHealthUI_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ShellExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.XGpuEjectDialog_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CallingShellApp_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.CloudExperienceHost_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.Cortana_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.NarratorQuickStart_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkCaptivePortal_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$MountDir\Windows\SystemApps\Microsoft.Windows.OOBENetworkConnectionFlow_cw5n1h2txyewy" -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "[STEP] Debloat done."
 
 # --- Patch registry: bypass, OOBE, branding, ...
@@ -57,42 +93,56 @@ reg add "HKLM\TMP\Microsoft\Windows NT\CurrentVersion" /v RegisteredOrganization
 reg add "HKLM\TMP\Microsoft\Windows\CurrentVersion\OOBE" /v BypassNRO /t REG_DWORD /d 1 /f
 reg add "HKLM\TMP\Microsoft\Windows\CurrentVersion\OOBE" /v SkipMachineOOBE /t REG_DWORD /d 1 /f
 reg add "HKLM\TMP\Microsoft\Windows\CurrentVersion\OOBE" /v SkipUserOOBE /t REG_DWORD /d 1 /f
+# Patch bổ sung từ Fox Khang (Defender, Telemetry, Ads, Copilot, Widgets, ...)
+reg add "HKLM\TMP\Microsoft\Windows NT\CurrentVersion" /v EditionSubManufacturer /t REG_SZ /d "Microsoft Corporation" /f
+reg add "HKLM\TMP\Microsoft\Windows NT\CurrentVersion" /v EditionSubVersion /t REG_SZ /d "EnterpriseG" /f
+reg add "HKLM\TMP\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v "SettingsPageVisibility" /t REG_SZ /d "hide:activation;gaming-gamebar;gaming-gamedvr;gaming-gamemode;quietmomentsgame" /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v DisableAntiSpyware /t REG_DWORD /d 1 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v DisableAntiVirus /t REG_DWORD /d 1 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v DisableRealtimeMonitoring /t REG_DWORD /d 1 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v DisableSpecialRunningModes /t REG_DWORD /d 1 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v ServiceKeepAlive /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartup /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnBoot /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnLogon /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnStartup /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnShutdown /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnSleep /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnWake /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnResume /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnSuspend /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHibernate /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridBoot /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdown /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridSleep /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridResume /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridSuspend /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridHibernate /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridWake /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownResume /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownSuspend /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownHibernate /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownWake /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownShutdown /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownSleep /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownResume /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownSuspend /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownHibernate /t REG_DWORD /d 0 /f
+reg add "HKLM\TMP\Policies\Microsoft\Windows Defender" /v AllowFastServiceStartupOnHybridShutdownWake /t REG_DWORD /d 0 /f
 reg unload HKLM\TMP
 Write-Host "[STEP] Registry patched."
-
-# --- Patch SKU/Edition (Fox Khang logic)
-Write-Host "[STEP] Patching SKU/Edition..."
-$WimInfo = Get-WindowsImage -ImagePath $WimPath.FullName -Index 1
-$Build = $WimInfo.Version
-if ($Build -like "261*") { $SxsType = "24H2" } elseif ($Build -like "22621*") { $SxsType = "Normal" } else { $SxsType = "Legacy" }
-$SxsSource = Join-Path $FilesDir "sxs\$SxsType"
-$SxsTarget = Join-Path $MountDir "sxs"
-New-Item -ItemType Directory -Force -Path $SxsTarget | Out-Null
-Copy-Item "$SxsSource\*" $SxsTarget -Recurse -Force
-$MumOld = Join-Path $SxsTarget "Microsoft-Windows-EnterpriseGEdition~31bf3856ad364e35~amd64~~10.0.22621.1.mum"
-$CatOld = Join-Path $SxsTarget "Microsoft-Windows-EnterpriseGEdition~31bf3856ad364e35~amd64~~10.0.22621.1.cat"
-$MumNew = Join-Path $SxsTarget "Microsoft-Windows-EnterpriseGEdition~31bf3856ad364e35~amd64~~$Build.mum"
-$CatNew = Join-Path $SxsTarget "Microsoft-Windows-EnterpriseGEdition~31bf3856ad364e35~amd64~~$Build.cat"
-if (Test-Path $MumOld) {
-    Copy-Item $MumOld $MumNew -Force
-    (Get-Content $MumNew) -replace '10\.0\.22621\.1', $Build | Set-Content $MumNew
-}
-if (Test-Path $CatOld) {
-    Copy-Item $CatOld $CatNew -Force
-}
-$XmlPath = Join-Path $SxsTarget "1.xml"
-if (Test-Path $XmlPath) {
-    (Get-Content $XmlPath) -replace '10\.0\.22621\.1', $Build | Set-Content $XmlPath
-}
-dism /image:$MountDir /apply-unattend:$SxsTarget\1.xml | Out-Null
-$ProductKey = if ($Build -like "261*") { "FV469-WGNG4-YQP66-2B2HY-KD8YX" } else { "YYVX9-NTFWV-6MDM3-9PT4T-4M68B" }
-dism /Image:$MountDir /Set-Edition:EnterpriseG /AcceptEula /ProductKey:$ProductKey | Out-Null
-Write-Host "[STEP] SKU/Edition patched."
 
 # 5. Unmount and commit changes to WIM
 Write-Host "[STEP] Committing changes to install.wim..."
 dism /Unmount-Wim /MountDir:"$MountDir" /Commit | Out-Null
 Write-Host "[STEP] Unmounted and committed install.wim."
+
+# 5b. Optimize WIM và set image property
+Write-Host "[STEP] Optimizing WIM..."
+$Wimlib = "$FilesDir\wimlib-imagex.exe"
+& $Wimlib optimize $WimPath.FullName | Out-Null
+Write-Host "[STEP] Setting WIM image properties..."
+& $Wimlib info $WimPath.FullName 1 --image-property NAME="Windows EnterpriseG" --image-property DESCRIPTION="Windows EnterpriseG" --image-property FLAGS="EnterpriseG" --image-property DISPLAYNAME="Windows EnterpriseG" --image-property DISPLAYDESCRIPTION="Windows EnterpriseG" | Out-Null
 
 # 6. Build new ISO
 if (-not $OutputIso) {
