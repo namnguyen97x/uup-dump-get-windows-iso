@@ -25,8 +25,8 @@ jobs:
           $activeTargets = @()
           foreach ($m in $matches) {
             $target = $m.Groups[1].Value
-            # Tìm dòng chứa target này
-            $line = $lines | Where-Object { $_ -match "\"$target\"\s*=\s*@\{" }
+            $pattern = '^[ \t]*"' + [regex]::Escape($target) + '"\s*=\s*@\{'
+            $line = $lines | Where-Object { $_ -match $pattern }
             if ($line -and ($line -notmatch '^[ \t]*#')) {
               $activeTargets += $target
             }
