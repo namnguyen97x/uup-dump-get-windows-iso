@@ -19,7 +19,7 @@ jobs:
         shell: pwsh
         run: |
           $content = Get-Content uup-dump-get-windows-iso.ps1 -Raw
-          $matches = [regex]::Matches($content, '"([^"]+)"\s*=\s*@\{')
+          $matches = [regex]::Matches($content, '^[ \t]*"([^"]+)"\s*=\s*@\{', [System.Text.RegularExpressions.RegexOptions]::Multiline)
           $names = $matches | ForEach-Object { $_.Groups[1].Value }
           $json = @{ include = @() }
           foreach ($name in $names) { $json.include += @{ name = $name } }
