@@ -53,4 +53,4 @@ Write-Host "[+] Đóng gói lại thành ISO: $OutputIso"
 # 6. Xoá thư mục tạm
 Remove-Item -Recurse -Force $TempDir
 
-Write-Host "[✓] Hoàn tất! File ISO EnterpriseG: $OutputIso" 
+Write-Host "[OK] Done! EnterpriseG ISO file: $OutputIso" 
