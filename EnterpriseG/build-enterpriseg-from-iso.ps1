@@ -136,10 +136,26 @@ Write-Host "[STEP] Building new ISO: $OutputIso"
 $Oscdimg = "$FilesDir\oscdimg\oscdimg.exe"
 $BootImg = "$FilesDir\oscdimg\etfsboot.com"
 $EfiImg = "$FilesDir\oscdimg\efisys.bin"
-if (!(Test-Path $BootImg) -or !(Test-Path $EfiImg)) {
-    Write-Host "[ERROR] Boot sector files missing!" -ForegroundColor Red
+
+# DEBUG: In đường dẫn các file boot sector
+Write-Host "[DEBUG] BootImg: $BootImg"
+Write-Host "[DEBUG] EfiImg: $EfiImg"
+Write-Host "[DEBUG] Oscdimg: $Oscdimg"
+Write-Host "[DEBUG] OutputIso: $OutputIso"
+Write-Host "[DEBUG] IsoExtractDir: $IsoExtractDir"
+if (!(Test-Path $BootImg)) { Write-Host "[ERROR] BootImg not found at $BootImg!" -ForegroundColor Red; exit 1 }
+if (!(Test-Path $EfiImg)) { Write-Host "[ERROR] EfiImg not found at $EfiImg!" -ForegroundColor Red; exit 1 }
+if (!(Test-Path $Oscdimg)) { Write-Host "[ERROR] Oscdimg not found at $Oscdimg!" -ForegroundColor Red; exit 1 }
+
+# Thử mở file boot sector để kiểm tra quyền truy cập
+try {
+    $null = Get-Content $BootImg -ErrorAction Stop
+    $null = Get-Content $EfiImg -ErrorAction Stop
+} catch {
+    Write-Host "[ERROR] Cannot access boot sector files! $_" -ForegroundColor Red
     exit 1
 }
+
 & $Oscdimg -b$BootImg -u2 -h -m -lWIN_ENTG -bootdata:2#p0,e,b$BootImg#pEF,e,b$EfiImg "$IsoExtractDir" "$OutputIso"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Failed to build ISO!" -ForegroundColor Red
