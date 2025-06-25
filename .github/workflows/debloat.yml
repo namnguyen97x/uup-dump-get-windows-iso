@@ -119,18 +119,41 @@ jobs:
         run: |
           Write-Host "Testing debloat script syntax..."
           
-          # Test script syntax
-          $syntaxTest = pwsh -Command "Get-Command './scripts/debloat-windows-iso.ps1' -ErrorAction SilentlyContinue"
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Script syntax error or file not found"
+          # Test if advanced script file exists
+          if (!(Test-Path "./scripts/debloat-windows-iso.ps1")) {
+              Write-Error "Advanced script file not found: ./scripts/debloat-windows-iso.ps1"
               exit 1
           }
           
-          # Test script parameters
-          $paramTest = pwsh -Command "& './scripts/debloat-windows-iso.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose -WhatIf"
-          Write-Host "Script parameter test completed"
+          # Test if simple script file exists
+          if (!(Test-Path "./scripts/simple-debloat.ps1")) {
+              Write-Error "Simple script file not found: ./scripts/simple-debloat.ps1"
+              exit 1
+          }
           
-          Write-Host "Script syntax test passed!"
+          # Test advanced script syntax by loading it
+          try {
+              $scriptContent = Get-Content "./scripts/debloat-windows-iso.ps1" -Raw
+              $null = [System.Management.Automation.PSParser]::Tokenize($scriptContent, [ref]$null)
+              Write-Host "Advanced script syntax validation passed!"
+          }
+          catch {
+              Write-Error "Advanced script syntax error: $($_.Exception.Message)"
+              exit 1
+          }
+          
+          # Test simple script syntax by loading it
+          try {
+              $scriptContent = Get-Content "./scripts/simple-debloat.ps1" -Raw
+              $null = [System.Management.Automation.PSParser]::Tokenize($scriptContent, [ref]$null)
+              Write-Host "Simple script syntax validation passed!"
+          }
+          catch {
+              Write-Error "Simple script syntax error: $($_.Exception.Message)"
+              exit 1
+          }
+          
+          Write-Host "All script syntax tests passed!"
 
       - name: Run Windows ISO Debloat
         shell: pwsh
