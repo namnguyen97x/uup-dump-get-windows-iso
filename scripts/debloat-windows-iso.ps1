@@ -11,7 +11,7 @@ param(
     [string]$OutputPath,
     
     [Parameter(Mandatory=$false)]
-    [switch]$Verbose,
+    [switch]$IsVerbose,
     
     [Parameter(Mandatory=$false)]
     [string]$WindowsVersion = "11",
@@ -32,7 +32,7 @@ function Write-Log {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logMessage = "[$timestamp] [$Level] $Message"
     
-    if ($Verbose) {
+    if ($IsVerbose) {
         Write-Host $logMessage
     }
     
@@ -527,7 +527,7 @@ try {
 }
 catch {
     Write-ErrorLog "Critical error during debloat process" $_.Exception.Message
-    Write-Host "Debloat failed! Check error logs for details." -ForegroundColor Red
+    Write-Host "Debloat failed! Check logs for details." -ForegroundColor Red
     exit 1
 }
 finally {

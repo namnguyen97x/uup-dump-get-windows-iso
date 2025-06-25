@@ -114,14 +114,14 @@ jobs:
           Write-Host "Contents of iso-input directory:"
           Get-ChildItem -Path "./iso-input" -Recurse | Format-Table Name, Length, LastWriteTime
 
-      - name: Run Simple Windows ISO Debloat script
+      - name: Run Advanced Windows ISO Debloat script (mount and debloat)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "./iso-output" -Force
           $ErrorActionPreference = "Continue"
           $ProgressPreference = "SilentlyContinue"
-          Write-Host "Starting simple Windows ISO debloat process..."
-          & "./scripts/simple-debloat.ps1" -InputPath "./iso-input" -OutputPath "./iso-output" -Verbose
+          Write-Host "Starting advanced Windows ISO debloat process (mount and debloat)..."
+          & "./scripts/debloat-windows-iso.ps1" -InputPath "./iso-input" -OutputPath "./iso-output" -IsVerbose
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Debloat script failed with exit code: $LASTEXITCODE"
             exit $LASTEXITCODE
@@ -162,7 +162,7 @@ jobs:
           $outputSize = ($outputFiles | Measure-Object -Property Length -Sum).Sum
           $sizeReduction = if ($inputSize -gt 0) { [math]::Round((($inputSize - $outputSize) / $inputSize) * 100, 2) } else { 0 }
           # Tạo summary dạng text thuần, không dùng markdown code block hoặc backtick
-          $summary = "Windows ISO Debloat Summary`n`n"
+          $summary = "Windows ISO Debloat Summary (Advanced - Mount and Debloat)`n`n"
           $summary += "Input Files:`n"
           foreach ($f in $inputFiles) { $summary += "- $($f.Name) ($([math]::Round($f.Length / 1MB, 2)) MB)`n" }
           $summary += "`nOutput Files:`n"
@@ -171,20 +171,22 @@ jobs:
           $summary += "- Original Size: $([math]::Round($inputSize / 1MB, 2)) MB`n"
           $summary += "- Debloated Size: $([math]::Round($outputSize / 1MB, 2)) MB`n"
           $summary += "- Reduction: $sizeReduction%`n"
-          $summary += "`nDebloat Features Applied:`n"
-          $summary += "- Created unattended setup configuration (unattend.xml)`n"
-          $summary += "- Generated registry settings for telemetry removal`n"
-          $summary += "- Created setup script for post-installation debloat`n"
+          $summary += "`nAdvanced Debloat Features Applied:`n"
+          $summary += "- Mounted Windows ISO image`n"
+          $summary += "- Removed Windows components via DISM`n"
+          $summary += "- Removed bloatware apps via DISM`n"
+          $summary += "- Disabled telemetry and tracking`n"
+          $summary += "- Created unattended setup configuration`n"
           $summary += "- Applied OOBE bypass settings`n"
           $summary += "- Optimized for privacy and performance`n"
-          $summary += "- Removed bloatware apps (via setup script)`n"
+          $summary += "- Committed changes back to image`n"
           $summary += "`nUsage Instructions:`n"
           $summary += "1. Burn ISO to USB/DVD: Use the debloated ISO file`n"
           $summary += "2. Automatic Setup: Installation will proceed without user interaction`n"
           $summary += "3. Post-Install: Run setup-debloat.ps1 for additional optimizations`n"
           $summary += "4. Registry Settings: Import debloat-settings.reg for telemetry removal`n"
           $summary += "`nFiles Included:`n"
-          $summary += "- debloated-*.iso: Optimized Windows ISO`n"
+          $summary += "- debloated-*.iso: Optimized Windows ISO (real debloat)`n"
           $summary += "- unattend.xml: Unattended setup configuration`n"
           $summary += "- debloat-settings.reg: Registry optimizations`n"
           $summary += "- setup-debloat.ps1: Post-installation script`n"
