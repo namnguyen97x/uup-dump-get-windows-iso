@@ -273,10 +273,10 @@ Windows Registry Editor Version 5.00
 # Windows ISO Debloat Instructions
 
 ## Files Included:
-- `debloated-*.iso` - Debloated Windows ISO file
-- `unattend.xml` - Unattended setup configuration
-- `debloat-settings.reg` - Registry settings for debloating
-- `*.json` - Information about the debloat process
+- unattend.xml - Unattended setup configuration
+- debloat-settings.reg - Registry settings for debloating
+- *.json - Information about the debloat process
+- simple-debloat.log - Log file
 
 ## How to Use:
 
@@ -289,11 +289,11 @@ Windows Registry Editor Version 5.00
 
 ### Method 2: Apply Settings After Installation
 1. Install Windows normally from the ISO
-2. After installation, run the `debloat-settings.reg` file
+2. After installation, run the debloat-settings.reg file
 3. Restart the computer
 
 ### Method 3: Use Unattended Setup
-1. Copy `unattend.xml` to the root of your installation media
+1. Copy unattend.xml to the root of your installation media
 2. Boot from the media
 3. Setup will use the unattended configuration
 
