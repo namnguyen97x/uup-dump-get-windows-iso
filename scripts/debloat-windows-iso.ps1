@@ -51,27 +51,64 @@ function Write-ErrorLog {
     Add-Content -Path $ErrorLogFile -Value $errorMessage
 }
 
-function Test-Administrator {
-    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
 function Mount-WindowsImage {
     param([string]$ImagePath, [string]$MountPath)
     
     try {
         Write-Log "Mounting Windows image: $ImagePath to $MountPath"
         
-        # Tạo thư mục mount nếu chưa tồn tại
-        if (!(Test-Path $MountPath)) {
-            New-Item -ItemType Directory -Path $MountPath -Force | Out-Null
+        # Kiểm tra file ISO tồn tại
+        if (!(Test-Path $ImagePath)) {
+            throw "ISO file not found: $ImagePath"
         }
         
-        # Mount image sử dụng DISM
-        $result = DISM.exe /Mount-Image /ImageFile:$ImagePath /Index:1 /MountDir:$MountPath /ReadOnly
+        # Lấy thông tin file ISO
+        $isoInfo = Get-Item $ImagePath
+        Write-Log "ISO file size: $($isoInfo.Length) bytes"
+        Write-Log "ISO file last modified: $($isoInfo.LastWriteTime)"
+        
+        # Lấy đường dẫn tuyệt đối
+        $absoluteImagePath = (Resolve-Path $ImagePath).Path
+        $absoluteMountPath = (Resolve-Path $MountPath).Path
+        
+        Write-Log "Absolute image path: $absoluteImagePath"
+        Write-Log "Absolute mount path: $absoluteMountPath"
+        
+        # Kiểm tra thư mục mount
+        if (!(Test-Path $absoluteMountPath)) {
+            Write-Log "Creating mount directory: $absoluteMountPath"
+            New-Item -ItemType Directory -Path $absoluteMountPath -Force | Out-Null
+        }
+        
+        # Kiểm tra quyền truy cập
+        Write-Log "Checking file access permissions..."
+        try {
+            $testAccess = [System.IO.File]::OpenRead($absoluteImagePath)
+            $testAccess.Close()
+            Write-Log "File access test passed"
+        }
+        catch {
+            throw "Cannot access ISO file: $($_.Exception.Message)"
+        }
+        
+        # Kiểm tra file ISO có phải là Windows ISO không
+        Write-Log "Checking ISO file integrity with DISM..."
+        $dismCheck = DISM.exe /Get-WimInfo /WimFile:"$absoluteImagePath" 2>&1
+        Write-Log "DISM check output: $dismCheck"
+        
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to mount image. DISM exit code: $LASTEXITCODE"
+            Write-Log "DISM check failed with exit code: $LASTEXITCODE"
+            # Thử mount trực tiếp nếu DISM check thất bại
+            Write-Log "Attempting direct mount despite DISM check failure..."
+        }
+        
+        # Mount image sử dụng DISM với đường dẫn tuyệt đối
+        Write-Log "Mounting image with DISM..."
+        $mountResult = DISM.exe /Mount-Image /ImageFile:"$absoluteImagePath" /Index:1 /MountDir:"$absoluteMountPath" /ReadOnly 2>&1
+        Write-Log "DISM mount output: $mountResult"
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to mount image. DISM exit code: $LASTEXITCODE. Output: $mountResult"
         }
         
         Write-Log "Successfully mounted Windows image"
@@ -420,26 +457,20 @@ function Optimize-ISO {
     param([string]$IsoPath)
     
     try {
-        Write-Log "Optimizing ISO file..."
+        Write-Log "Optimizing ISO file: $IsoPath"
         
-        # Tạo file thông tin về ISO đã được debloat
-        $isoInfo = @{
-            OriginalFile = Split-Path $IsoPath -Leaf
-            DebloatDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            WindowsVersion = $WindowsVersion
-            FeaturesRemoved = @(
-                "Telemetry and tracking",
-                "Bloatware apps",
-                "Unnecessary Windows components"
-            )
-            UnattendedSetup = $true
-            OOBEBypass = $true
-        }
+        # Lấy đường dẫn tuyệt đối
+        $absoluteIsoPath = (Resolve-Path $IsoPath).Path
         
-        $infoFile = Join-Path (Split-Path $IsoPath -Parent) "debloat-info.json"
-        $isoInfo | ConvertTo-Json -Depth 3 | Out-File -FilePath $infoFile -Encoding UTF8
+        # Tạo file unattend.xml
+        $unattendPath = Join-Path (Split-Path $absoluteIsoPath) "unattend.xml"
+        Create-UnattendXML -Path $unattendPath -WindowsVersion $WindowsVersion
         
-        Write-Log "Successfully optimized ISO file"
+        # Tạo file autounattend.xml
+        $autounattendPath = Join-Path (Split-Path $absoluteIsoPath) "autounattend.xml"
+        Create-AutoUnattendXML -Path $autounattendPath -WindowsVersion $WindowsVersion
+        
+        Write-Log "ISO optimization completed successfully"
         return $true
     }
     catch {
@@ -450,15 +481,30 @@ function Optimize-ISO {
 
 # Main execution
 try {
+    # Kiểm tra quyền admin
+    if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-Error "This script requires Administrator privileges. Please run as Administrator."
+        exit 1
+    }
+    
     Write-Log "Starting Windows ISO debloat process..."
     Write-Log "Input Path: $InputPath"
     Write-Log "Output Path: $OutputPath"
     Write-Log "Windows Version: $WindowsVersion"
     
-    # Kiểm tra quyền admin
-    if (!(Test-Administrator)) {
-        throw "This script requires administrator privileges"
+    # Kiểm tra thư mục input
+    if (!(Test-Path $InputPath)) {
+        throw "Input directory not found: $InputPath"
     }
+    
+    # Tìm file ISO trong thư mục input
+    $isoFiles = Get-ChildItem -Path $InputPath -Filter "*.iso" -Recurse
+    if ($isoFiles.Count -eq 0) {
+        throw "No ISO files found in input directory: $InputPath"
+    }
+    
+    $isoFile = $isoFiles[0]
+    Write-Log "Found ISO file: $($isoFile.Name)"
     
     # Tạo thư mục output nếu chưa tồn tại
     if (!(Test-Path $OutputPath)) {
@@ -466,20 +512,19 @@ try {
     }
     
     # Copy ISO file
-    $isoFile = Copy-ISOFile -SourcePath $InputPath -Destination $OutputPath
-    if (!$isoFile) {
-        throw "Failed to copy ISO file"
-    }
+    Write-Log "Copying ISO file from $InputPath to $OutputPath"
+    $outputIsoPath = Join-Path $OutputPath $isoFile.Name
+    Copy-Item -Path $isoFile.FullName -Destination $outputIsoPath -Force
+    Write-Log "Successfully copied ISO file: $($isoFile.Name)"
     
     # Tạo thư mục mount
     $mountPath = Join-Path $OutputPath "mount"
-    if (Test-Path $mountPath) {
-        Remove-Item -Path $mountPath -Recurse -Force
+    if (!(Test-Path $mountPath)) {
+        New-Item -ItemType Directory -Path $mountPath -Force | Out-Null
     }
-    New-Item -ItemType Directory -Path $mountPath -Force | Out-Null
     
     # Mount Windows image
-    if (!(Mount-WindowsImage -ImagePath $isoFile -MountPath $mountPath)) {
+    if (!(Mount-WindowsImage -ImagePath $outputIsoPath -MountPath $mountPath)) {
         throw "Failed to mount Windows image"
     }
     
@@ -508,7 +553,7 @@ try {
     }
     
     # Optimize ISO
-    if (!(Optimize-ISO -IsoPath $isoFile)) {
+    if (!(Optimize-ISO -IsoPath $outputIsoPath)) {
         $success = $false
     }
     

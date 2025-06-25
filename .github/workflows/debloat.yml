@@ -114,18 +114,28 @@ jobs:
           Write-Host "Contents of iso-input directory:"
           Get-ChildItem -Path "./iso-input" -Recurse | Format-Table Name, Length, LastWriteTime
 
-      - name: Run Advanced Windows ISO Debloat script (mount and debloat)
+      - name: Run Windows ISO Debloat
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "./iso-output" -Force
-          $ErrorActionPreference = "Continue"
-          $ProgressPreference = "SilentlyContinue"
           Write-Host "Starting advanced Windows ISO debloat process (mount and debloat)..."
-          & "./scripts/debloat-windows-iso.ps1" -InputPath "./iso-input" -OutputPath "./iso-output" -IsVerbose
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Debloat script failed with exit code: $LASTEXITCODE"
-            exit $LASTEXITCODE
+          
+          # Tạo thư mục output nếu chưa tồn tại
+          if (!(Test-Path "./iso-output")) {
+              New-Item -ItemType Directory -Path "./iso-output" -Force | Out-Null
           }
+          
+          # Chạy script với quyền admin và verbose logging
+          $result = & pwsh -Command "& './scripts/debloat-windows-iso.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose"
+          $exitCode = $LASTEXITCODE
+          
+          if ($exitCode -ne 0) {
+              Write-Error "Debloat script failed with exit code: $exitCode"
+              exit $exitCode
+          }
+          
+          Write-Host "Debloat process completed successfully!"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show disk space after debloat
         shell: pwsh
