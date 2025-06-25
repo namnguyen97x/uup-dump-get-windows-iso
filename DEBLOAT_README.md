@@ -81,6 +81,25 @@ Workflow được cấu hình chạy tự động vào Chủ nhật hàng tuần
 .\scripts\simple-debloat.ps1 -InputPath ".\iso-input" -OutputPath ".\iso-output" -WindowsVersion "11" -Verbose
 ```
 
+## Sử dụng cực đơn giản với URL workflow run
+
+### 1. Trên GitHub Actions
+- Chọn **iso_source** = `workflow_url`
+- Chỉ cần nhập trường **workflow_url**: ví dụ
+  ```
+  @https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572
+  ```
+- Không cần điền thêm trường nào khác. Workflow sẽ tự động nhận diện repo, run_id và tải artifact đầu tiên (hoặc duy nhất) của run đó.
+
+### 2. Trên PowerShell (artifact-manager.ps1)
+```powershell
+# Chỉ cần truyền URL hoặc @URL
+.\scripts\artifact-manager.ps1 "@https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572"
+# hoặc
+.\scripts\artifact-manager.ps1 -WorkflowUrl "https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572"
+```
+- Script sẽ tự động nhận diện repo, run_id và tải artifact đầu tiên (hoặc duy nhất) về thư mục output.
+
 ## Tính năng động lấy artifact
 
 ### 🔍 Auto-Detection

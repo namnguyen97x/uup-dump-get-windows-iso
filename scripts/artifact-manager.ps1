@@ -2,33 +2,26 @@
 # Script để quản lý và tải artifacts từ GitHub Actions
 
 param(
+    [Parameter(Position=0, Mandatory=$false)]
+    [string]$WorkflowUrl = "",
     [Parameter(Mandatory=$false)]
     [string]$Repository = "",
-    
     [Parameter(Mandatory=$false)]
     [string]$Token = "",
-    
     [Parameter(Mandatory=$false)]
     [string]$Pattern = "Windows-*",
-    
     [Parameter(Mandatory=$false)]
     [int]$MaxRuns = 10,
-    
     [Parameter(Mandatory=$false)]
     [string]$OutputPath = "./artifacts",
-    
     [Parameter(Mandatory=$false)]
     [switch]$ListOnly,
-    
     [Parameter(Mandatory=$false)]
     [switch]$DownloadLatest,
-    
     [Parameter(Mandatory=$false)]
     [string]$WorkflowRunId = "",
-    
     [Parameter(Mandatory=$false)]
     [string]$ArtifactName = "",
-    
     [Parameter(Mandatory=$false)]
     [switch]$Verbose
 )
@@ -216,6 +209,39 @@ function Download-SpecificArtifact {
     }
 }
 
+function Download-Artifact-From-WorkflowUrl {
+    param([string]$WorkflowUrl, [string]$OutputPath)
+    # Parse repo and run_id from URL
+    if ($WorkflowUrl.StartsWith("@")) { $WorkflowUrl = $WorkflowUrl.Substring(1) }
+    if ($WorkflowUrl -match 'github.com/([^/]+/[^/]+)/actions/runs/([0-9]+)') {
+        $repo = $Matches[1]
+        $runId = $Matches[2]
+        Write-Host "Detected repo: $repo, run_id: $runId" -ForegroundColor Cyan
+        $token = Get-GitHubToken
+        $headers = @{'Authorization' = "token $token"; 'Accept' = 'application/vnd.github.v3+json'}
+        $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$runId/artifacts"
+        $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
+        if ($artifacts.artifacts.Count -eq 0) {
+            Write-Host "No artifact found in workflow run." -ForegroundColor Yellow
+            exit 1
+        }
+        $artifactName = $artifacts.artifacts[0].name
+        Write-Host "Downloading artifact: $artifactName from run: $runId" -ForegroundColor Green
+        if (!(Test-Path $OutputPath)) { New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null }
+        $result = gh run download $runId --repo $repo --name $artifactName --dir $OutputPath
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Successfully downloaded artifact: $artifactName" -ForegroundColor Green
+        } else {
+            Write-Host "Failed to download artifact: $artifactName" -ForegroundColor Red
+            exit 1
+        }
+        exit 0
+    } else {
+        Write-Host "Invalid workflow run URL!" -ForegroundColor Red
+        exit 1
+    }
+}
+
 # Main execution
 try {
     Write-Log "Starting Artifact Manager..." "INFO"
@@ -337,4 +363,12 @@ catch {
 }
 finally {
     Write-Log "Artifact Manager finished." "INFO"
+}
+
+# Main execution
+if ($WorkflowUrl -or ($args.Count -gt 0 -and $args[0] -match 'github.com/.+/actions/runs/')) {
+    $url = $WorkflowUrl
+    if (-not $url) { $url = $args[0] }
+    Download-Artifact-From-WorkflowUrl -WorkflowUrl $url -OutputPath $OutputPath
+    exit 0
 } 
