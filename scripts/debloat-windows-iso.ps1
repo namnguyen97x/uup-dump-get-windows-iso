@@ -94,9 +94,66 @@ function Mount-WindowsImage {
             throw "Cannot access ISO file: $($_.Exception.Message)"
         }
         
-        # Kiểm tra file ISO có phải là Windows ISO không
-        Write-Log "Checking ISO file integrity with DISM..."
-        $dismCheck = DISM.exe /Get-WimInfo /WimFile:"$absoluteImagePath" 2>&1
+        # Extract ISO file trước
+        Write-Log "Extracting ISO file..."
+        $extractPath = Join-Path (Split-Path $absoluteMountPath) "extracted-iso"
+        if (Test-Path $extractPath) {
+            Remove-Item -Path $extractPath -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
+        
+        # Extract ISO sử dụng PowerShell
+        Write-Log "Extracting ISO contents..."
+        try {
+            $extractResult = Expand-Archive -Path $absoluteImagePath -DestinationPath $extractPath -Force
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to extract ISO file with Expand-Archive"
+            }
+            Write-Log "ISO extraction completed with Expand-Archive"
+        }
+        catch {
+            Write-Log "Expand-Archive failed, trying alternative method..."
+            
+            # Thử mount ISO như drive
+            $driveLetter = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 } | Select-Object -First 1 | ForEach-Object { $_.DeviceID }
+            if (!$driveLetter) {
+                throw "No available drive letter for mounting ISO"
+            }
+            
+            Write-Log "Mounting ISO to drive $driveLetter"
+            $mountResult = Mount-DiskImage -ImagePath $absoluteImagePath -PassThru
+            if (!$mountResult) {
+                throw "Failed to mount ISO as drive"
+            }
+            
+            # Copy contents từ mounted drive
+            $mountedDrive = $mountResult | Get-Volume | Where-Object { $_.DriveLetter -eq $driveLetter }
+            if (!$mountedDrive) {
+                throw "Failed to get mounted drive information"
+            }
+            
+            Write-Log "Copying contents from mounted drive..."
+            Copy-Item -Path "$driveLetter\*" -Destination $extractPath -Recurse -Force
+            Write-Log "ISO extraction completed via drive mounting"
+            
+            # Dismount drive
+            Dismount-DiskImage -ImagePath $absoluteImagePath
+        }
+        
+        Write-Log "ISO extraction completed"
+        
+        # Tìm file WIM trong thư mục extracted
+        $wimFiles = Get-ChildItem -Path $extractPath -Filter "*.wim" -Recurse
+        if ($wimFiles.Count -eq 0) {
+            throw "No WIM files found in extracted ISO"
+        }
+        
+        $wimFile = $wimFiles[0]
+        Write-Log "Found WIM file: $($wimFile.Name)"
+        
+        # Kiểm tra WIM file với DISM
+        Write-Log "Checking WIM file integrity with DISM..."
+        $dismCheck = DISM.exe /Get-WimInfo /WimFile:"$($wimFile.FullName)" 2>&1
         Write-Log "DISM check output: $dismCheck"
         
         if ($LASTEXITCODE -ne 0) {
@@ -105,13 +162,13 @@ function Mount-WindowsImage {
             Write-Log "Attempting direct mount despite DISM check failure..."
         }
         
-        # Mount image sử dụng DISM với đường dẫn tuyệt đối
-        Write-Log "Mounting image with DISM..."
-        $mountResult = DISM.exe /Mount-Image /ImageFile:"$absoluteImagePath" /Index:1 /MountDir:"$absoluteMountPath" /ReadOnly 2>&1
+        # Mount WIM image sử dụng DISM
+        Write-Log "Mounting WIM image with DISM..."
+        $mountResult = DISM.exe /Mount-Image /ImageFile:"$($wimFile.FullName)" /Index:1 /MountDir:"$absoluteMountPath" /ReadOnly 2>&1
         Write-Log "DISM mount output: $mountResult"
         
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to mount image. DISM exit code: $LASTEXITCODE. Output: $mountResult"
+            throw "Failed to mount WIM image. DISM exit code: $LASTEXITCODE. Output: $mountResult"
         }
         
         Write-Log "Successfully mounted Windows image"
@@ -130,10 +187,25 @@ function Dismount-WindowsImage {
         Write-Log "Dismounting Windows image from: $MountPath"
         
         # Commit changes và dismount
-        $result = DISM.exe /Unmount-Image /MountDir:$MountPath /Commit
+        $result = DISM.exe /Unmount-Image /MountDir:$MountPath /Commit 2>&1
+        Write-Log "DISM unmount output: $result"
+        
         if ($LASTEXITCODE -ne 0) {
             Write-Log "Warning: Failed to commit changes, attempting to discard"
-            $result = DISM.exe /Unmount-Image /MountDir:$MountPath /Discard
+            $result = DISM.exe /Unmount-Image /MountDir:$MountPath /Discard 2>&1
+            Write-Log "DISM discard output: $result"
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "Warning: Failed to dismount image properly"
+            }
+        }
+        
+        # Cleanup extracted ISO files
+        $extractPath = Join-Path (Split-Path $MountPath) "extracted-iso"
+        if (Test-Path $extractPath) {
+            Write-Log "Cleaning up extracted ISO files..."
+            Remove-Item -Path $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Log "Extracted ISO files cleaned up"
         }
         
         Write-Log "Successfully dismounted Windows image"
@@ -484,6 +556,15 @@ function Optimize-ISO {
 
 # Main execution
 try {
+    # Kiểm tra PowerShell version
+    $psVersion = $PSVersionTable.PSVersion
+    Write-Log "PowerShell version: $psVersion"
+    
+    # Kiểm tra Expand-Archive command (có từ PowerShell 5.0)
+    if ($psVersion.Major -lt 5) {
+        throw "PowerShell 5.0 or higher is required for Expand-Archive command. Current version: $psVersion"
+    }
+    
     # Tạo thư mục output nếu chưa tồn tại
     if (!(Test-Path $OutputPath)) {
         New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
@@ -518,12 +599,15 @@ try {
     if ($DryRun) {
         Write-Log "DRY RUN MODE - No actual operations will be performed"
         Write-Log "Would copy ISO file: $($isoFile.Name)"
-        Write-Log "Would mount image to: $OutputPath\mount"
+        Write-Log "Would extract ISO to: $OutputPath\extracted-iso"
+        Write-Log "Would find WIM file in extracted contents"
+        Write-Log "Would mount WIM image to: $OutputPath\mount"
         Write-Log "Would remove Windows components"
         Write-Log "Would remove bloatware apps"
         Write-Log "Would disable telemetry"
         Write-Log "Would create unattended setup"
-        Write-Log "Would dismount image"
+        Write-Log "Would dismount WIM image"
+        Write-Log "Would cleanup extracted ISO files"
         Write-Log "Would optimize ISO"
         Write-Log "DRY RUN completed successfully!"
         Write-Host "Dry run completed successfully!" -ForegroundColor Green
