@@ -20,7 +20,10 @@ param(
     [switch]$SkipTelemetryRemoval = $false,
     
     [Parameter(Mandatory=$false)]
-    [switch]$SkipBloatwareRemoval = $false
+    [switch]$SkipBloatwareRemoval = $false,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$DryRun = $false
 )
 
 # Cấu hình logging
@@ -496,6 +499,7 @@ try {
     Write-Log "Input Path: $InputPath"
     Write-Log "Output Path: $OutputPath"
     Write-Log "Windows Version: $WindowsVersion"
+    Write-Log "Dry Run: $DryRun"
     
     # Kiểm tra thư mục input
     if (!(Test-Path $InputPath)) {
@@ -510,6 +514,21 @@ try {
     
     $isoFile = $isoFiles[0]
     Write-Log "Found ISO file: $($isoFile.Name)"
+    
+    if ($DryRun) {
+        Write-Log "DRY RUN MODE - No actual operations will be performed"
+        Write-Log "Would copy ISO file: $($isoFile.Name)"
+        Write-Log "Would mount image to: $OutputPath\mount"
+        Write-Log "Would remove Windows components"
+        Write-Log "Would remove bloatware apps"
+        Write-Log "Would disable telemetry"
+        Write-Log "Would create unattended setup"
+        Write-Log "Would dismount image"
+        Write-Log "Would optimize ISO"
+        Write-Log "DRY RUN completed successfully!"
+        Write-Host "Dry run completed successfully!" -ForegroundColor Green
+        exit 0
+    }
     
     # Tạo thư mục output nếu chưa tồn tại
     if (!(Test-Path $OutputPath)) {

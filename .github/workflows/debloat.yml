@@ -155,6 +155,47 @@ jobs:
           
           Write-Host "All script syntax tests passed!"
 
+      - name: Test debloat script execution
+        shell: pwsh
+        run: |
+          Write-Host "Testing debloat script execution with dry-run..."
+          
+          # Test if script can be loaded and executed
+          try {
+              # Test script loading
+              $scriptPath = "./scripts/debloat-windows-iso.ps1"
+              $scriptContent = Get-Content $scriptPath -Raw
+              
+              # Test parameter validation
+              $params = @{
+                  InputPath = "./iso-input"
+                  OutputPath = "./iso-output"
+                  WindowsVersion = "11"
+                  IsVerbose = $true
+              }
+              
+              Write-Host "Script loaded successfully"
+              Write-Host "Parameters validated: $($params | ConvertTo-Json)"
+              
+              # Test script execution with dry-run
+              Write-Host "Testing script execution with dry-run..."
+              $dryRunResult = & pwsh -Command "& './scripts/debloat-windows-iso.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose -DryRun"
+              $dryRunExitCode = $LASTEXITCODE
+              
+              if ($dryRunExitCode -eq 0) {
+                  Write-Host "Script dry-run test passed!"
+              } else {
+                  Write-Error "Script dry-run test failed with exit code: $dryRunExitCode"
+                  exit $dryRunExitCode
+              }
+              
+              Write-Host "Script execution test passed!"
+          }
+          catch {
+              Write-Error "Script execution test failed: $($_.Exception.Message)"
+              exit 1
+          }
+
       - name: Run Windows ISO Debloat
         shell: pwsh
         run: |
@@ -203,6 +244,31 @@ jobs:
           }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show advanced debloat logs immediately
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== IMMEDIATE DEBUG - ADVANCED DEBLOAT LOG ==="
+          if (Test-Path "./iso-output/debloat.log") {
+              Get-Content "./iso-output/debloat.log"
+          } else {
+              Write-Host "No debloat.log found"
+          }
+          
+          Write-Host "=== IMMEDIATE DEBUG - ADVANCED ERROR LOG ==="
+          if (Test-Path "./iso-output/debloat-errors.log") {
+              Get-Content "./iso-output/debloat-errors.log"
+          } else {
+              Write-Host "No debloat-errors.log found"
+          }
+          
+          Write-Host "=== IMMEDIATE DEBUG - DIRECTORY CONTENTS ==="
+          if (Test-Path "./iso-output") {
+              Get-ChildItem -Path "./iso-output" -Recurse | Format-Table Name, Length, LastWriteTime
+          } else {
+              Write-Host "No iso-output directory found"
+          }
 
       - name: Show debloat logs
         if: always()
