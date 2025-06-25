@@ -161,43 +161,33 @@ jobs:
           $inputSize = ($inputFiles | Measure-Object -Property Length -Sum).Sum
           $outputSize = ($outputFiles | Measure-Object -Property Length -Sum).Sum
           $sizeReduction = if ($inputSize -gt 0) { [math]::Round((($inputSize - $outputSize) / $inputSize) * 100, 2) } else { 0 }
-          Add-Content $env:GITHUB_STEP_SUMMARY @"
-          ## Windows ISO Debloat Summary
-          
-          ### Input Files
-          | File | Size |
-          |------|------|
-          $($inputFiles | ForEach-Object {"| $($_.Name) | $([math]::Round($_.Length / 1MB, 2)) MB |"})
-          
-          ### Output Files
-          | File | Size |
-          |------|------|
-          $($outputFiles | ForEach-Object {"| $($_.Name) | $([math]::Round($_.Length / 1MB, 2)) MB |"})
-          
-          ### Size Reduction
-          - **Original Size:** $([math]::Round($inputSize / 1MB, 2)) MB
-          - **Debloated Size:** $([math]::Round($outputSize / 1MB, 2)) MB
-          - **Reduction:** $sizeReduction%
-          
-          ### Debloat Features Applied
-          - Created unattended setup configuration (unattend.xml)
-          - Generated registry settings for telemetry removal
-          - Created setup script for post-installation debloat
-          - Applied OOBE bypass settings
-          - Optimized for privacy and performance
-          - Removed bloatware apps (via setup script)
-          
-          ### Usage Instructions
-          1. **Burn ISO to USB/DVD**: Use the debloated ISO file
-          2. **Automatic Setup**: Installation will proceed without user interaction
-          3. **Post-Install**: Run setup-debloat.ps1 for additional optimizations
-          4. **Registry Settings**: Import debloat-settings.reg for telemetry removal
-          
-          ### Files Included
-          - `debloated-*.iso` - Optimized Windows ISO
-          - `unattend.xml` - Unattended setup configuration
-          - `debloat-settings.reg` - Registry optimizations
-          - `setup-debloat.ps1` - Post-installation script
-          - `README.md` - Detailed instructions
-          - `*.json` - Debloat information
-          "@ 
+          # Tạo summary dạng text thuần, không dùng markdown code block hoặc backtick
+          $summary = "Windows ISO Debloat Summary`n`n"
+          $summary += "Input Files:`n"
+          foreach ($f in $inputFiles) { $summary += "- $($f.Name) ($([math]::Round($f.Length / 1MB, 2)) MB)`n" }
+          $summary += "`nOutput Files:`n"
+          foreach ($f in $outputFiles) { $summary += "- $($f.Name) ($([math]::Round($f.Length / 1MB, 2)) MB)`n" }
+          $summary += "`nSize Reduction:`n"
+          $summary += "- Original Size: $([math]::Round($inputSize / 1MB, 2)) MB`n"
+          $summary += "- Debloated Size: $([math]::Round($outputSize / 1MB, 2)) MB`n"
+          $summary += "- Reduction: $sizeReduction%`n"
+          $summary += "`nDebloat Features Applied:`n"
+          $summary += "- Created unattended setup configuration (unattend.xml)`n"
+          $summary += "- Generated registry settings for telemetry removal`n"
+          $summary += "- Created setup script for post-installation debloat`n"
+          $summary += "- Applied OOBE bypass settings`n"
+          $summary += "- Optimized for privacy and performance`n"
+          $summary += "- Removed bloatware apps (via setup script)`n"
+          $summary += "`nUsage Instructions:`n"
+          $summary += "1. Burn ISO to USB/DVD: Use the debloated ISO file`n"
+          $summary += "2. Automatic Setup: Installation will proceed without user interaction`n"
+          $summary += "3. Post-Install: Run setup-debloat.ps1 for additional optimizations`n"
+          $summary += "4. Registry Settings: Import debloat-settings.reg for telemetry removal`n"
+          $summary += "`nFiles Included:`n"
+          $summary += "- debloated-*.iso: Optimized Windows ISO`n"
+          $summary += "- unattend.xml: Unattended setup configuration`n"
+          $summary += "- debloat-settings.reg: Registry optimizations`n"
+          $summary += "- setup-debloat.ps1: Post-installation script`n"
+          $summary += "- README.md: Detailed instructions`n"
+          $summary += "- *.json: Debloat information`n"
+          Add-Content $env:GITHUB_STEP_SUMMARY $summary 
