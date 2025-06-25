@@ -3,48 +3,15 @@ name: Debloat Windows ISO
 on:
   workflow_dispatch:
     inputs:
-      iso_source:
-        description: 'ISO source (artifact, url, auto-detect, or workflow_url)'
-        required: true
-        default: 'auto-detect'
-        type: choice
-        options:
-          - auto-detect
-          - artifact
-          - url
-          - workflow_url
       workflow_url:
         description: 'Workflow run URL (ví dụ: https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572)'
-        required: false
+        required: true
         type: string
-      iso_url:
-        description: 'ISO URL (if source is url)'
-        required: false
-        type: string
-      artifact_name:
-        description: 'Artifact name to download (if source is artifact)'
-        required: false
-        type: string
-        default: 'Windows-11-23H2'
-      workflow_run_id:
-        description: 'Workflow run ID to get artifacts from (optional)'
-        required: false
-        type: string
-      artifact_pattern:
-        description: 'Pattern to match artifact names (e.g., "Windows-*")'
-        required: false
-        type: string
-        default: 'Windows-*'
-  schedule:
-    # Chạy hàng tuần vào Chủ nhật lúc 2:00 AM UTC
-    - cron: '0 2 * * 0'
 
 jobs:
   detect-artifacts:
     runs-on: windows-2022
     outputs:
-      available-artifacts: ${{ steps.list-artifacts.outputs.artifacts }}
-      latest-artifact: ${{ steps.get-latest.outputs.artifact }}
       workflow_run_id: ${{ steps.parse-url.outputs.run_id }}
       workflow_url_artifact: ${{ steps.get-artifact-from-url.outputs.artifact_name }}
     steps:
@@ -69,57 +36,9 @@ jobs:
             echo "run_id=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
 
-      - name: List available artifacts
-        id: list-artifacts
-        shell: pwsh
-        run: |
-          $token = "${{ secrets.GITHUB_TOKEN }}"
-          $repo = "${{ github.repository }}"
-          $headers = @{
-            'Authorization' = "token $token"
-            'Accept' = 'application/vnd.github.v3+json'
-          }
-          $workflowRunsUrl = "https://api.github.com/repos/$repo/actions/runs?per_page=10&status=completed&conclusion=success"
-          $workflowRuns = Invoke-RestMethod -Uri $workflowRunsUrl -Headers $headers
-          $allArtifacts = @()
-          foreach ($run in $workflowRuns.workflow_runs) {
-            $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$($run.id)/artifacts"
-            try {
-              $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
-              foreach ($artifact in $artifacts.artifacts) {
-                if ($artifact.name -like "${{ github.event.inputs.artifact_pattern || 'Windows-*' }}") {
-                  $artifactInfo = @{
-                    name = $artifact.name
-                    workflow_run_id = $run.id
-                    workflow_name = $run.name
-                    created_at = $artifact.created_at
-                    size = $artifact.size_in_bytes
-                  }
-                  $allArtifacts += $artifactInfo
-                }
-              }
-            } catch {}
-          }
-          $artifactsJson = $allArtifacts | ConvertTo-Json -Depth 3
-          echo "artifacts=$artifactsJson" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Get latest artifact
-        id: get-latest
-        shell: pwsh
-        run: |
-          $artifactsJson = '${{ steps.list-artifacts.outputs.artifacts }}'
-          if ($artifactsJson -and $artifactsJson -ne '[]') {
-            $artifacts = $artifactsJson | ConvertFrom-Json
-            $latestArtifact = $artifacts | Sort-Object created_at -Descending | Select-Object -First 1
-            $latestJson = $latestArtifact | ConvertTo-Json -Depth 3
-            echo "artifact=$latestJson" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            echo "artifact=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-
       - name: Get artifact from workflow_url
         id: get-artifact-from-url
-        if: github.event.inputs.iso_source == 'workflow_url' && steps.parse-url.outputs.run_id != ''
+        if: steps.parse-url.outputs.run_id != ''
         shell: pwsh
         run: |
           $token = "${{ secrets.GITHUB_TOKEN }}"
@@ -154,12 +73,11 @@ jobs:
       - name: Setup PowerShell environment
         shell: pwsh
         run: |
-          # Cài đặt các module PowerShell cần thiết
           Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
           Install-Module -Name 7Zip4PowerShell -Force -Scope CurrentUser -ErrorAction SilentlyContinue
 
       - name: Download ISO from workflow_url
-        if: github.event.inputs.iso_source == 'workflow_url' && needs.detect-artifacts.outputs.workflow_run_id != ''
+        if: needs.detect-artifacts.outputs.workflow_run_id != ''
         shell: pwsh
         run: |
           $artifactName = "${{ needs.detect-artifacts.outputs.workflow_url_artifact }}"
@@ -179,79 +97,6 @@ jobs:
             exit 1
           }
 
-      - name: Download ISO from auto-detected artifact
-        if: github.event.inputs.iso_source == 'auto-detect' || github.event.inputs.iso_source == null
-        shell: pwsh
-        run: |
-          $latestArtifactJson = '${{ needs.detect-artifacts.outputs.latest-artifact }}'
-          if ($latestArtifactJson -and $latestArtifactJson -ne '') {
-            $latestArtifact = $latestArtifactJson | ConvertFrom-Json
-            $artifactName = $latestArtifact.name
-            $workflowRunId = $latestArtifact.workflow_run_id
-            Write-Host "Downloading latest artifact: $artifactName from workflow run: $workflowRunId"
-            New-Item -ItemType Directory -Path "./iso-input" -Force
-            gh run download $workflowRunId --name $artifactName --dir ./iso-input
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "Successfully downloaded artifact: $artifactName"
-            } else {
-              Write-Error "Failed to download artifact: $artifactName"
-              exit 1
-            }
-          } else {
-            Write-Error "No artifacts found for auto-detection"
-            exit 1
-          }
-
-      - name: Download ISO from specific artifact
-        if: github.event.inputs.iso_source == 'artifact'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ github.event.inputs.artifact_name || 'Windows-11-23H2' }}
-          path: ./iso-input
-
-      - name: Download ISO from specific workflow run
-        if: github.event.inputs.iso_source == 'artifact' && github.event.inputs.workflow_run_id != ''
-        shell: pwsh
-        run: |
-          $artifactName = "${{ github.event.inputs.artifact_name || 'Windows-11-23H2' }}"
-          $workflowRunId = "${{ github.event.inputs.workflow_run_id }}"
-          Write-Host "Downloading artifact: $artifactName from workflow run: $workflowRunId"
-          New-Item -ItemType Directory -Path "./iso-input" -Force
-          gh run download $workflowRunId --name $artifactName --dir ./iso-input
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to download artifact from workflow run: $workflowRunId"
-            exit 1
-          }
-
-      - name: Download ISO from URL
-        if: github.event.inputs.iso_source == 'url' && github.event.inputs.iso_url != ''
-        shell: pwsh
-        run: |
-          $isoUrl = "${{ github.event.inputs.iso_url }}"
-          $outputPath = "./iso-input"
-          New-Item -ItemType Directory -Path $outputPath -Force
-          
-          Write-Host "Downloading ISO from: $isoUrl"
-          $fileName = Split-Path $isoUrl -Leaf
-          $outputFile = Join-Path $outputPath $fileName
-          
-          Invoke-WebRequest -Uri $isoUrl -OutFile $outputFile -UseBasicParsing
-          Write-Host "Downloaded ISO to: $outputFile"
-
-      - name: List available artifacts for reference
-        shell: pwsh
-        run: |
-          $artifactsJson = '${{ needs.detect-artifacts.outputs.available-artifacts }}'
-          if ($artifactsJson -and $artifactsJson -ne '[]') {
-            $artifacts = $artifactsJson | ConvertFrom-Json
-            
-            Write-Host "Available artifacts for reference:"
-            $artifacts | ForEach-Object {
-              $sizeMB = [math]::Round($_.size / 1MB, 2)
-              Write-Host "  - $($_.name) (${sizeMB}MB) from $($_.workflow_name) - Created: $($_.created_at)"
-            }
-          }
-
       - name: List downloaded files
         shell: pwsh
         run: |
@@ -261,16 +106,11 @@ jobs:
       - name: Run Simple Windows ISO Debloat script
         shell: pwsh
         run: |
-          # Tạo thư mục output
           New-Item -ItemType Directory -Path "./iso-output" -Force
-          
-          # Chạy script debloat đơn giản
           $ErrorActionPreference = "Continue"
           $ProgressPreference = "SilentlyContinue"
-          
           Write-Host "Starting simple Windows ISO debloat process..."
           & "./scripts/simple-debloat.ps1" -InputPath "./iso-input" -OutputPath "./iso-output" -Verbose
-          
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Debloat script failed with exit code: $LASTEXITCODE"
             exit $LASTEXITCODE
@@ -307,33 +147,11 @@ jobs:
         run: |
           $inputFiles = Get-ChildItem -Path "./iso-input" -File
           $outputFiles = Get-ChildItem -Path "./iso-output" -File
-          
           $inputSize = ($inputFiles | Measure-Object -Property Length -Sum).Sum
           $outputSize = ($outputFiles | Measure-Object -Property Length -Sum).Sum
           $sizeReduction = if ($inputSize -gt 0) { [math]::Round((($inputSize - $outputSize) / $inputSize) * 100, 2) } else { 0 }
-          
-          # Lấy thông tin về artifact gốc
-          $sourceInfo = ""
-          if ('${{ github.event.inputs.iso_source }}' -eq 'auto-detect' -or '${{ github.event.inputs.iso_source }}' -eq '') {
-            $latestArtifactJson = '${{ needs.detect-artifacts.outputs.latest-artifact }}'
-            if ($latestArtifactJson -and $latestArtifactJson -ne '') {
-              $latestArtifact = $latestArtifactJson | ConvertFrom-Json
-              $sourceInfo = "Auto-detected: $($latestArtifact.name) from $($latestArtifact.workflow_name)"
-            }
-          } elseif ('${{ github.event.inputs.iso_source }}' -eq 'artifact') {
-            $sourceInfo = "Manual artifact: ${{ github.event.inputs.artifact_name || 'Windows-11-23H2' }}"
-            if ('${{ github.event.inputs.workflow_run_id }}' -ne '') {
-              $sourceInfo += " (Run ID: ${{ github.event.inputs.workflow_run_id }})"
-            }
-          } elseif ('${{ github.event.inputs.iso_source }}' -eq 'url') {
-            $sourceInfo = "URL: ${{ github.event.inputs.iso_url }}"
-          }
-          
           Add-Content $env:GITHUB_STEP_SUMMARY @"
           ## Windows ISO Debloat Summary
-          
-          ### Source Information
-          **Source:** $sourceInfo
           
           ### Input Files
           | File | Size |
@@ -371,5 +189,4 @@ jobs:
           - `setup-debloat.ps1` - Post-installation script
           - `README.md` - Detailed instructions
           - `*.json` - Debloat information
-          "@ 
           "@ 
