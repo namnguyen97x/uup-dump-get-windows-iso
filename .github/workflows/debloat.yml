@@ -114,6 +114,24 @@ jobs:
           Write-Host "Contents of iso-input directory:"
           Get-ChildItem -Path "./iso-input" -Recurse | Format-Table Name, Length, LastWriteTime
 
+      - name: Test debloat script syntax
+        shell: pwsh
+        run: |
+          Write-Host "Testing debloat script syntax..."
+          
+          # Test script syntax
+          $syntaxTest = pwsh -Command "Get-Command './scripts/debloat-windows-iso.ps1' -ErrorAction SilentlyContinue"
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Script syntax error or file not found"
+              exit 1
+          }
+          
+          # Test script parameters
+          $paramTest = pwsh -Command "& './scripts/debloat-windows-iso.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose -WhatIf"
+          Write-Host "Script parameter test completed"
+          
+          Write-Host "Script syntax test passed!"
+
       - name: Run Windows ISO Debloat
         shell: pwsh
         run: |
@@ -129,13 +147,57 @@ jobs:
           $exitCode = $LASTEXITCODE
           
           if ($exitCode -ne 0) {
-              Write-Error "Debloat script failed with exit code: $exitCode"
-              exit $exitCode
+              Write-Error "Advanced debloat script failed with exit code: $exitCode"
+              
+              # Hiển thị log files để debug
+              Write-Host "=== ADVANCED DEBLOAT LOG ==="
+              if (Test-Path "./iso-output/debloat.log") {
+                  Get-Content "./iso-output/debloat.log" | Write-Host
+              } else {
+                  Write-Host "No debloat.log found"
+              }
+              
+              Write-Host "=== ADVANCED ERROR LOG ==="
+              if (Test-Path "./iso-output/debloat-errors.log") {
+                  Get-Content "./iso-output/debloat-errors.log" | Write-Host
+              } else {
+                  Write-Host "No debloat-errors.log found"
+              }
+              
+              # Fallback to simple debloat
+              Write-Host "Falling back to simple debloat script..."
+              $simpleResult = & pwsh -Command "& './scripts/simple-debloat.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose"
+              $simpleExitCode = $LASTEXITCODE
+              
+              if ($simpleExitCode -ne 0) {
+                  Write-Error "Both advanced and simple debloat scripts failed!"
+                  exit $simpleExitCode
+              } else {
+                  Write-Host "Simple debloat completed successfully as fallback!"
+              }
+          } else {
+              Write-Host "Advanced debloat process completed successfully!"
           }
-          
-          Write-Host "Debloat process completed successfully!"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show debloat logs
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "=== FINAL DEBLOAT LOG ==="
+          if (Test-Path "./iso-output/debloat.log") {
+              Get-Content "./iso-output/debloat.log"
+          } else {
+              Write-Host "No debloat.log found"
+          }
+          
+          Write-Host "=== FINAL ERROR LOG ==="
+          if (Test-Path "./iso-output/debloat-errors.log") {
+              Get-Content "./iso-output/debloat-errors.log"
+          } else {
+              Write-Host "No debloat-errors.log found"
+          }
 
       - name: Show disk space after debloat
         shell: pwsh

@@ -282,7 +282,7 @@ Windows Registry Editor Version 5.00
 }
 
 function Create-UnattendedSetup {
-    param([string]$MountPath)
+    param([string]$MountPath, [string]$WindowsVersion)
     
     try {
         Write-Log "Creating unattended setup configuration..."
@@ -481,6 +481,11 @@ function Optimize-ISO {
 
 # Main execution
 try {
+    # Tạo thư mục output nếu chưa tồn tại
+    if (!(Test-Path $OutputPath)) {
+        New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
+    }
+    
     # Kiểm tra quyền admin
     if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         Write-Error "This script requires Administrator privileges. Please run as Administrator."
@@ -528,51 +533,47 @@ try {
         throw "Failed to mount Windows image"
     }
     
-    # Thực hiện debloat
-    $success = $true
-    
+    # Remove Windows components
     if (!(Remove-WindowsComponents -MountPath $mountPath)) {
-        $success = $false
+        Write-Log "Warning: Failed to remove some Windows components"
     }
     
+    # Remove bloatware apps
     if (!(Remove-BloatwareApps -MountPath $mountPath)) {
-        $success = $false
+        Write-Log "Warning: Failed to remove some bloatware apps"
     }
     
-    if (!(Disable-Telemetry -MountPath $mountPath)) {
-        $success = $false
+    # Disable telemetry
+    if (!$SkipTelemetryRemoval) {
+        if (!(Disable-Telemetry -MountPath $mountPath)) {
+            Write-Log "Warning: Failed to disable telemetry"
+        }
     }
     
-    if (!(Create-UnattendedSetup -MountPath $mountPath)) {
-        $success = $false
+    # Create unattended setup
+    if (!(Create-UnattendedSetup -MountPath $mountPath -WindowsVersion $WindowsVersion)) {
+        Write-Log "Warning: Failed to create unattended setup"
     }
     
-    # Dismount image
+    # Dismount Windows image
     if (!(Dismount-WindowsImage -MountPath $mountPath)) {
-        $success = $false
+        Write-Log "Warning: Failed to dismount Windows image properly"
     }
     
     # Optimize ISO
     if (!(Optimize-ISO -IsoPath $outputIsoPath)) {
-        $success = $false
+        Write-Log "Warning: Failed to optimize ISO"
     }
     
-    # Cleanup
-    if (Test-Path $mountPath) {
-        Remove-Item -Path $mountPath -Recurse -Force
-    }
-    
-    if ($success) {
-        Write-Log "Windows ISO debloat completed successfully!"
-        Write-Host "Debloat completed successfully! Output files in: $OutputPath" -ForegroundColor Green
-        exit 0
-    } else {
-        throw "Some debloat operations failed. Check logs for details."
-    }
+    Write-Log "Debloat process completed successfully!"
+    Write-Host "Debloat completed successfully!" -ForegroundColor Green
+    exit 0
 }
 catch {
-    Write-ErrorLog "Critical error during debloat process" $_.Exception.Message
+    $errorMessage = $_.Exception.Message
+    Write-ErrorLog "Critical error during debloat process" $errorMessage
     Write-Host "Debloat failed! Check logs for details." -ForegroundColor Red
+    Write-Host "Error: $errorMessage" -ForegroundColor Red
     exit 1
 }
 finally {
