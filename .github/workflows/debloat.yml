@@ -82,6 +82,41 @@ jobs:
           Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
           Install-Module -Name 7Zip4PowerShell -Force -Scope CurrentUser -ErrorAction SilentlyContinue
 
+      - name: Install 7-Zip
+        shell: pwsh
+        run: |
+          Write-Host "Installing 7-Zip for ISO extraction..."
+          
+          # Kiểm tra xem 7-Zip đã được cài đặt chưa
+          $sevenZipPath = Get-Command 7z -ErrorAction SilentlyContinue
+          if ($sevenZipPath) {
+              Write-Host "7-Zip is already installed: $($sevenZipPath.Source)"
+          } else {
+              Write-Host "7-Zip not found, installing via Chocolatey..."
+              
+              # Cài đặt Chocolatey nếu chưa có
+              if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
+                  Write-Host "Installing Chocolatey..."
+                  Set-ExecutionPolicy Bypass -Scope Process -Force
+                  [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+                  iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+              }
+              
+              # Cài đặt 7-Zip
+              choco install 7zip -y
+              
+              # Refresh PATH
+              $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
+              
+              # Kiểm tra lại
+              $sevenZipPath = Get-Command 7z -ErrorAction SilentlyContinue
+              if ($sevenZipPath) {
+                  Write-Host "7-Zip installed successfully: $($sevenZipPath.Source)"
+              } else {
+                  Write-Host "Warning: 7-Zip installation may have failed"
+              }
+          }
+
       - name: Download and extract artifact from workflow_url (no gh CLI)
         if: needs.detect-artifacts.outputs.workflow_run_id != ''
         shell: pwsh

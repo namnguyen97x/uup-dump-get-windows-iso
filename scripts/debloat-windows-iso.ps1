@@ -115,29 +115,66 @@ function Mount-WindowsImage {
             Write-Log "Expand-Archive failed, trying alternative method..."
             
             # Thử mount ISO như drive
-            $driveLetter = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 5 } | Select-Object -First 1 | ForEach-Object { $_.DeviceID }
-            if (!$driveLetter) {
-                throw "No available drive letter for mounting ISO"
+            Write-Log "Attempting to mount ISO as drive..."
+            
+            # Tìm drive letter trống
+            $usedDrives = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 -or $_.DriveType -eq 3 } | ForEach-Object { $_.DeviceID.TrimEnd('\') }
+            $availableDrives = @('D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z') | Where-Object { $_ -notin $usedDrives }
+            
+            if ($availableDrives.Count -eq 0) {
+                throw "No available drive letters for mounting ISO"
             }
             
-            Write-Log "Mounting ISO to drive $driveLetter"
-            $mountResult = Mount-DiskImage -ImagePath $absoluteImagePath -PassThru
-            if (!$mountResult) {
-                throw "Failed to mount ISO as drive"
+            $driveLetter = $availableDrives[0]
+            Write-Log "Using drive letter: $driveLetter"
+            
+            try {
+                Write-Log "Mounting ISO to drive $driveLetter"
+                $mountResult = Mount-DiskImage -ImagePath $absoluteImagePath -PassThru
+                if (!$mountResult) {
+                    throw "Failed to mount ISO as drive"
+                }
+                
+                # Đợi một chút để drive được mount
+                Start-Sleep -Seconds 2
+                
+                # Kiểm tra xem drive đã được mount chưa
+                $mountedDrive = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq "$driveLetter`:" }
+                if (!$mountedDrive) {
+                    throw "Drive $driveLetter was not mounted properly"
+                }
+                
+                Write-Log "Copying contents from mounted drive $driveLetter..."
+                
+                # Sử dụng robocopy để copy (mạnh mẽ hơn)
+                $robocopyResult = & robocopy "$driveLetter`:\" $extractPath /E /COPY:DAT /R:3 /W:1
+                if ($robocopyResult -le 7) { # robocopy success codes: 0-7
+                    Write-Log "ISO extraction completed via drive mounting with robocopy"
+                } else {
+                    throw "Robocopy failed with exit code: $robocopyResult"
+                }
+                
+                # Dismount drive
+                Dismount-DiskImage -ImagePath $absoluteImagePath
             }
-            
-            # Copy contents từ mounted drive
-            $mountedDrive = $mountResult | Get-Volume | Where-Object { $_.DriveLetter -eq $driveLetter }
-            if (!$mountedDrive) {
-                throw "Failed to get mounted drive information"
+            catch {
+                Write-Log "Drive mounting failed: $($_.Exception.Message)"
+                
+                # Thử sử dụng 7-Zip nếu có
+                Write-Log "Trying 7-Zip extraction..."
+                $sevenZipPath = Get-Command 7z -ErrorAction SilentlyContinue
+                if ($sevenZipPath) {
+                    Write-Log "Found 7-Zip, extracting with 7z..."
+                    $sevenZipResult = & 7z x $absoluteImagePath -o"$extractPath" -y
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Log "ISO extraction completed with 7-Zip"
+                    } else {
+                        throw "7-Zip extraction failed"
+                    }
+                } else {
+                    throw "All extraction methods failed. Expand-Archive, drive mounting, and 7-Zip are not available."
+                }
             }
-            
-            Write-Log "Copying contents from mounted drive..."
-            Copy-Item -Path "$driveLetter\*" -Destination $extractPath -Recurse -Force
-            Write-Log "ISO extraction completed via drive mounting"
-            
-            # Dismount drive
-            Dismount-DiskImage -ImagePath $absoluteImagePath
         }
         
         Write-Log "ISO extraction completed"
