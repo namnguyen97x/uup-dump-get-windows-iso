@@ -228,19 +228,26 @@ echo ">>> Đã tạo file ./install.debloated.wim. Khi build lại ISO, hãy dù
 # 5. Xây dựng lại file ISO bootable
 echo ">>> 5. Xây dựng lại file ISO bootable mới..."
 
+# Cài đặt genisoimage nếu chưa có
+if ! command -v genisoimage &> /dev/null; then
+  echo ">>> Cài đặt genisoimage..."
+  sudo apt-get update
+  sudo apt-get install -y genisoimage
+fi
+
 # Đảm bảo file boot có quyền đọc (nếu cần)
 sudo chmod +r iso_extracted/boot/etfsboot.com
 
 # Kiểm tra file UEFI boot
 if [ -f iso_extracted/efi/microsoft/boot/efisys.bin ]; then
-  echo ">>> Tạo ISO hybrid (UEFI + BIOS) với UDF..."
-  xorriso -as mkisofs -iso-level 3 -udf -o "$DEBLOATED_ISO_NAME" \
+  echo ">>> Tạo ISO hybrid (UEFI + BIOS) với UDF bằng genisoimage..."
+  genisoimage -udf -iso-level 3 -o "$DEBLOATED_ISO_NAME" \
     -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table \
     -eltorito-alt-boot -e efi/microsoft/boot/efisys.bin -no-emul-boot \
     iso_extracted
 else
-  echo ">>> Tạo ISO BIOS-only với UDF..."
-  xorriso -as mkisofs -iso-level 3 -udf -o "$DEBLOATED_ISO_NAME" \
+  echo ">>> Tạo ISO BIOS-only với UDF bằng genisoimage..."
+  genisoimage -udf -iso-level 3 -o "$DEBLOATED_ISO_NAME" \
     -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table \
     iso_extracted
 fi
