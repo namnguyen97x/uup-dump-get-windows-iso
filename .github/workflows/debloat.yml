@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            wimtools p7zip-full xorriso
+            wimtools p7zip-full xorriso jq
 
       # --- TỰ ĐỘNG XÁC ĐỊNH LOẠI NGUỒN ---
       - name: Xác định loại nguồn và thông tin
@@ -65,15 +65,60 @@ jobs:
           wget -q -O windows.iso "${{ steps.detect_source.outputs.url }}"
           echo "ISO_PATH=windows.iso" >> $GITHUB_ENV
 
-      - name: Lấy file ISO từ Workflow Artifact
+      # --- SỬ DỤNG GITHUB CLI ĐỂ TẢI ARTIFACT LỚN ---
+      - name: Lấy thông tin artifacts từ workflow
         if: steps.detect_source.outputs.source_type == 'workflow'
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          repo: ${{ steps.detect_source.outputs.repo }}
-          run_id: ${{ steps.detect_source.outputs.run_id }}
-          path: ./downloaded_artifact
+        id: get_artifacts
+        run: |
+          REPO="${{ steps.detect_source.outputs.repo }}"
+          RUN_ID="${{ steps.detect_source.outputs.run_id }}"
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
           
+          echo "Getting artifacts for run $RUN_ID in $REPO..."
+          
+          # Gọi API để lấy danh sách artifacts
+          ARTIFACTS_JSON=$(curl -s -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts")
+          
+          echo "Artifacts response: $ARTIFACTS_JSON"
+          
+          # Lấy artifact đầu tiên
+          ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[0].id // empty')
+          ARTIFACT_NAME=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[0].name // "Windows-ISO"')
+          
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "::error::No artifacts found in workflow run"
+            exit 1
+          fi
+          
+          echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "Found artifact: $ARTIFACT_NAME (ID: $ARTIFACT_ID)"
+
+      - name: Tải artifact bằng GitHub CLI
+        if: steps.detect_source.outputs.source_type == 'workflow'
+        run: |
+          REPO="${{ steps.detect_source.outputs.repo }}"
+          ARTIFACT_ID="${{ steps.get_artifacts.outputs.artifact_id }}"
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          
+          echo "Downloading artifact $ARTIFACT_ID from $REPO..."
+          
+          # Tạo thư mục download
+          mkdir -p ./downloaded_artifact
+          
+          # Tải artifact bằng GitHub CLI
+          gh auth login --with-token <<< "$TOKEN"
+          gh api repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip --output ./downloaded_artifact/artifact.zip
+          
+          # Giải nén artifact
+          cd ./downloaded_artifact
+          unzip -q artifact.zip
+          rm artifact.zip
+          cd ..
+          
+          echo "Artifact downloaded and extracted successfully"
+
       - name: Tìm file ISO trong artifact đã tải
         if: steps.detect_source.outputs.source_type == 'workflow'
         run: |
@@ -90,17 +135,8 @@ jobs:
         id: name_generator
         run: |
           if [ "${{ steps.detect_source.outputs.source_type }}" == "workflow" ]; then
-            # Lấy tên artifact từ GitHub API
-            TOKEN="${{ secrets.GITHUB_TOKEN }}"
-            REPO="${{ steps.detect_source.outputs.repo }}"
-            RUN_ID="${{ steps.detect_source.outputs.run_id }}"
-            
-            # Gọi API để lấy thông tin artifacts
-            ARTIFACTS_JSON=$(curl -s -H "Authorization: token $TOKEN" \
-              "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts")
-            
-            # Lấy tên artifact đầu tiên
-            ARTIFACT_NAME=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[0].name // "Windows-ISO"')
+            # Sử dụng tên artifact đã lấy được
+            ARTIFACT_NAME="${{ steps.get_artifacts.outputs.artifact_name }}"
             echo "BASENAME=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
             echo "Using artifact name: $ARTIFACT_NAME"
           else
@@ -138,6 +174,7 @@ jobs:
           if [ "${{ steps.detect_source.outputs.source_type }}" == "workflow" ]; then
             echo "**Repository:** ${{ steps.detect_source.outputs.repo }}" >> $GITHUB_STEP_SUMMARY
             echo "**Run ID:** ${{ steps.detect_source.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Artifact:** ${{ steps.get_artifacts.outputs.artifact_name }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "**Source URL:** ${{ steps.detect_source.outputs.url }}" >> $GITHUB_STEP_SUMMARY
           fi
