@@ -1,260 +1,176 @@
 # Windows ISO Debloat Workflow
 
-Dự án này cung cấp GitHub Actions workflow và PowerShell scripts để tự động debloat Windows ISO, dựa trên repository [Windows-ISO-Debloater](https://github.com/itsNileshHere/Windows-ISO-Debloater).
+This repository contains a GitHub Actions workflow for debloating Windows ISO files to remove bloatware and create optimized installation media.
 
-## Tính năng chính
+## Features
 
-### 🔧 GitHub Actions Workflow (`.github/workflows/debloat.yml`)
+### 🔧 Two Debloat Methods
 
-- **Tự động phát hiện artifact**: Tự động tìm và tải artifact mới nhất từ các workflow runs
-- **Tải ISO linh hoạt**: Từ artifact, URL, hoặc auto-detect
-- **Debloat tự động**: Sử dụng PowerShell scripts
-- **Unattended setup**: Tạo cấu hình cài đặt tự động
-- **OOBE bypass**: Bỏ qua các bước thiết lập ban đầu
-- **Artifact upload**: Tải lên các file đã được debloat
+1. **Shell Script Method** (`debloat_windows.sh`)
+   - Runs on Ubuntu Linux
+   - Uses `wimtools`, `p7zip-full`, and `xorriso`
+   - Actually removes AppX packages from the WIM image
+   - Creates bootable ISO with reduced bloatware
 
-### 📜 PowerShell Scripts
+2. **PowerShell Method** (`scripts/debloat-windows-iso.ps1`)
+   - Runs on Windows
+   - Creates unattended setup configuration
+   - Generates telemetry disable registry files
+   - Provides detailed debloat information
 
-#### 1. `scripts/debloat-windows-iso.ps1` (Advanced)
-- Mount/unmount Windows ISO
-- Remove Windows components bằng DISM
-- Remove bloatware apps
-- Disable telemetry
-- Tạo unattended setup
+### 📥 Smart Input Detection
 
-#### 2. `scripts/simple-debloat.ps1` (Recommended)
-- Không cần mount ISO
-- Tạo các file cấu hình
-- Tạo setup script post-installation
-- An toàn và ổn định hơn
+- **Single Input Field**: Only one field to fill - the source
+- **Auto-Detection**: Automatically detects if it's a workflow URL or direct download link
+- **Artifact Name**: Uses the actual artifact name for output file naming
 
-#### 3. `scripts/artifact-manager.ps1` (New!)
-- Quản lý artifacts một cách linh hoạt
-- Tự động phát hiện repository và token
-- Tải artifact từ workflow runs cụ thể
-- Hỗ trợ pattern matching cho artifact names
+## Usage
 
-## Cách sử dụng
+### GitHub Actions Workflow
 
-### 1. Chạy Workflow thủ công
+1. Go to the **Actions** tab in this repository
+2. Select **"Debloat Windows ISO"** workflow
+3. Click **"Run workflow"**
+4. Enter the source in the single input field:
 
-1. Vào tab **Actions** trên GitHub repository
-2. Chọn workflow **Debloat Windows ISO**
-3. Click **Run workflow**
-4. Chọn nguồn ISO:
-   - **auto-detect**: Tự động tìm artifact mới nhất (mặc định)
-   - **artifact**: Tải từ artifact cụ thể
-   - **url**: Tải từ URL tùy chỉnh
-5. Cấu hình thêm:
-   - **Artifact Pattern**: Pattern để match artifact names (mặc định: `Windows-*`)
-   - **Workflow Run ID**: ID của workflow run cụ thể (tùy chọn)
-   - **Artifact Name**: Tên artifact cụ thể (nếu chọn source = artifact)
-6. Click **Run workflow**
-
-### 2. Chạy tự động theo lịch
-
-Workflow được cấu hình chạy tự động vào Chủ nhật hàng tuần lúc 2:00 AM UTC với chế độ auto-detect.
-
-### 3. Sử dụng Artifact Manager Script
-
-```powershell
-# Liệt kê tất cả artifacts có sẵn
-.\scripts\artifact-manager.ps1 -ListOnly -Pattern "Windows-*"
-
-# Tải artifact mới nhất
-.\scripts\artifact-manager.ps1 -DownloadLatest -Pattern "Windows-*" -OutputPath "./downloads"
-
-# Tải artifact cụ thể từ workflow run
-.\scripts\artifact-manager.ps1 -WorkflowRunId "123456789" -ArtifactName "Windows-11-23H2" -OutputPath "./downloads"
-
-# Chế độ interactive (chọn artifact từ danh sách)
-.\scripts\artifact-manager.ps1 -Pattern "Windows-*" -OutputPath "./downloads"
+#### For Workflow URL:
+```
+https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572
 ```
 
-### 4. Chạy script debloat locally
-
-```powershell
-# Cài đặt script
-.\scripts\simple-debloat.ps1 -InputPath ".\iso-input" -OutputPath ".\iso-output" -Verbose
-
-# Với các tùy chọn khác
-.\scripts\simple-debloat.ps1 -InputPath ".\iso-input" -OutputPath ".\iso-output" -WindowsVersion "11" -Verbose
+#### For Direct Download URL:
+```
+https://example.com/windows11.iso
 ```
 
-## Sử dụng cực đơn giản với URL workflow run
+### Input Parameter
 
-### 1. Trên GitHub Actions
-- Chọn **iso_source** = `workflow_url`
-- Chỉ cần nhập trường **workflow_url**: ví dụ
-  ```
-  @https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572
-  ```
-- Không cần điền thêm trường nào khác. Workflow sẽ tự động nhận diện repo, run_id và tải artifact đầu tiên (hoặc duy nhất) của run đó.
+| Parameter | Description | Required | Default |
+|-----------|-------------|----------|---------|
+| `source` | Workflow URL or direct download link (auto-detected) | Yes | Example workflow URL |
 
-### 2. Trên PowerShell (artifact-manager.ps1)
-```powershell
-# Chỉ cần truyền URL hoặc @URL
-.\scripts\artifact-manager.ps1 "@https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572"
-# hoặc
-.\scripts\artifact-manager.ps1 -WorkflowUrl "https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572"
+### Auto-Detection Logic
+
+The workflow automatically detects the source type:
+
+- **Workflow URL**: Contains `github.com` and `/actions/runs/`
+- **Direct URL**: Any other URL format
+
+## Output
+
+The workflow produces:
+
+### Shell Script Output (Ubuntu)
+- `debloated-{artifact_name}.iso` - Optimized Windows ISO with bloatware removed
+- Bootable ISO ready for installation
+
+### PowerShell Output (Windows)
+- Original ISO file (copied)
+- `unattend.xml` - Unattended setup configuration
+- `telemetry-disable.reg` - Registry file to disable telemetry
+- `debloat-info.json` - Detailed debloat information
+- `README.md` - Usage instructions
+
+## Removed Components
+
+### AppX Packages (Shell Script)
+- Cortana (`Microsoft.549981C3F5F10`)
+- Bing News & Weather
+- Get Help & Get Started
+- People, Skype, Alarms & Clock
+- Camera, Mail and Calendar
+- Feedback Hub, Maps, Voice Recorder
+- Xbox Apps
+- Various Microsoft Store apps
+
+### Windows Components (PowerShell)
+- Internet Explorer Optional Package
+- Media Player Package
+- Tablet PC Math Package
+- Speech TTS Package
+- Speech Recognition Package
+
+## Files Structure
+
 ```
-- Script sẽ tự động nhận diện repo, run_id và tải artifact đầu tiên (hoặc duy nhất) về thư mục output.
+uup-dump-get-windows-iso/
+├── .github/workflows/
+│   └── debloat.yml              # Main workflow file
+├── scripts/
+│   ├── debloat-windows-iso.ps1  # Advanced PowerShell script
+│   └── simple-debloat.ps1       # Simple PowerShell script
+├── debloat_windows.sh           # Shell script for Ubuntu
+└── DEBLOAT_README.md           # This file
+```
 
-## Tính năng động lấy artifact
+## Workflow Steps
 
-### 🔍 Auto-Detection
-Workflow tự động:
-- Quét các workflow runs gần đây (tối đa 10 runs)
-- Tìm artifacts phù hợp với pattern
-- Chọn artifact mới nhất để tải
-- Hiển thị thông tin chi tiết về artifact được chọn
+1. **Setup**: Checkout repository and install tools
+2. **Auto-Detect**: Determine source type (workflow URL or direct URL)
+3. **Download**: Get ISO from detected source
+4. **Process**: Run debloat script (shell or PowerShell)
+5. **Output**: Upload debloated files as artifacts
 
-### 📋 Artifact Pattern Matching
-- Hỗ trợ wildcard patterns (ví dụ: `Windows-*`, `*11*`, `*23H2*`)
-- Có thể tùy chỉnh pattern qua input parameter
-- Tự động lọc artifacts không phù hợp
+## Requirements
 
-### 🔗 Cross-Workflow Artifact Access
-- Tải artifacts từ bất kỳ workflow run nào
-- Hỗ trợ workflow run ID cụ thể
-- Tương thích với build.yml và các workflow khác
+### For Shell Script (Ubuntu)
+- `wimtools` - Windows image manipulation
+- `p7zip-full` - ISO extraction
+- `xorriso` - ISO creation
+- `jq` - JSON parsing for artifact names
 
-### 📊 Artifact Information
-Workflow cung cấp thông tin chi tiết:
-- Tên artifact và workflow source
-- Kích thước file
-- Thời gian tạo
-- Workflow run ID
-- Trạng thái download
-
-## Output Files
-
-Sau khi chạy workflow, bạn sẽ nhận được các file sau:
-
-### 📁 ISO Files
-- `debloated-*.iso` - Windows ISO đã được tối ưu
-
-### ⚙️ Configuration Files
-- `unattend.xml` - Cấu hình cài đặt tự động
-- `debloat-settings.reg` - Registry settings để disable telemetry
-- `setup-debloat.ps1` - Script chạy sau khi cài đặt
-
-### 📋 Documentation
-- `README.md` - Hướng dẫn chi tiết
-- `*.json` - Thông tin về quá trình debloat
-- `*.log` - Log files
-
-## Cách sử dụng ISO đã debloat
-
-### Phương pháp 1: Burn ISO to USB/DVD
-1. Tải xuống file `debloated-*.iso`
-2. Sử dụng Rufus, Windows Media Creation Tool, hoặc công cụ tương tự
-3. Burn ISO vào USB hoặc DVD
-4. Boot từ media
-5. Cài đặt sẽ tự động hoàn thành mà không cần can thiệp
-
-### Phương pháp 2: Sử dụng Unattended Setup
-1. Copy file `unattend.xml` vào thư mục gốc của media cài đặt
-2. Boot từ media
-3. Setup sẽ sử dụng cấu hình unattended
-
-### Phương pháp 3: Post-Installation Debloat
-1. Cài đặt Windows bình thường
-2. Sau khi cài đặt, chạy file `debloat-settings.reg`
-3. Chạy script `setup-debloat.ps1`
-4. Restart máy tính
-
-## Tính năng Debloat
-
-### 🚫 Disabled Features
-- **Telemetry**: Windows telemetry và tracking
-- **Cortana**: Virtual assistant
-- **Windows Update**: Automatic updates (có thể bật lại)
-- **Windows Defender**: Built-in antivirus (có thể bật lại)
-- **Bloatware Apps**: 3D Builder, Bing apps, Maps, etc.
-
-### ⚡ Performance Optimizations
-- Disable search suggestions
-- Optimize taskbar
-- Reduce background services
-- Improve boot time
-
-### 🔒 Privacy Settings
-- Disable data collection
-- Disable diagnostic services
-- Disable advertising ID
-- Disable location tracking
+### For PowerShell (Windows)
+- PowerShell 5.0+
+- Administrative privileges (for advanced operations)
 
 ## Troubleshooting
 
-### Lỗi thường gặp
+### Common Issues
 
-1. **Workflow fails to detect artifacts**
-   - Kiểm tra pattern có đúng không
-   - Đảm bảo có workflow runs thành công
-   - Kiểm tra quyền truy cập repository
+1. **ISO not found**: Ensure the URL is accessible or artifact exists
+2. **Permission denied**: Run PowerShell as Administrator
+3. **Tool not found**: Check if required tools are installed
+4. **Disk space**: Ensure sufficient space for ISO processing
 
-2. **Artifact download fails**
-   - Kiểm tra workflow run ID có đúng không
-   - Đảm bảo artifact name chính xác
-   - Kiểm tra GitHub token permissions
+### Logs
 
-3. **Script fails to run**
-   - Kiểm tra quyền admin (nếu chạy locally)
-   - Kiểm tra PowerShell execution policy
-   - Đảm bảo GitHub CLI đã cài đặt
+- Check workflow logs in GitHub Actions
+- PowerShell scripts create detailed log files
+- Shell script outputs progress to console
 
-4. **ISO không boot được**
-   - Kiểm tra file ISO có bị corrupt không
-   - Thử burn lại với công cụ khác
+## Examples
 
-### Log Files
-- `debloat.log` - General log
-- `debloat-errors.log` - Error log
-- GitHub Actions logs trong tab Actions
-
-## Tùy chỉnh
-
-### Thay đổi Artifact Pattern
-```yaml
-# Trong workflow
-artifact_pattern: "Windows-11-*"  # Chỉ lấy Windows 11 artifacts
-artifact_pattern: "*23H2*"        # Chỉ lấy artifacts có 23H2
-artifact_pattern: "*"             # Lấy tất cả artifacts
+### Example 1: Workflow URL
 ```
+https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572
+```
+- Automatically detects as workflow URL
+- Downloads artifact from the specified run
+- Uses artifact name for output file
 
-### Thêm/Remove Apps
-Chỉnh sửa array `$appsToRemove` trong script để thêm/bớt apps cần remove.
+### Example 2: Direct Download URL
+```
+https://isomicrosoft.com/download/12
+```
+- Automatically detects as direct URL
+- Downloads ISO directly
+- Uses filename from URL for output
 
-### Thay đổi Registry Settings
-Chỉnh sửa file `debloat-settings.reg` để thay đổi registry settings.
+## Contributing
 
-### Tùy chỉnh Unattended Setup
-Chỉnh sửa file `unattend.xml` để thay đổi cấu hình cài đặt tự động.
-
-## Bảo mật
-
-⚠️ **Lưu ý quan trọng**:
-- Script này disable một số tính năng bảo mật của Windows
-- Chỉ sử dụng trên máy tính cá nhân hoặc môi trường test
-- Có thể re-enable các tính năng bảo mật sau khi cài đặt
-- GitHub token cần có quyền truy cập repository và workflows
-
-## Đóng góp
-
-1. Fork repository
-2. Tạo feature branch
-3. Commit changes
-4. Push to branch
-5. Tạo Pull Request
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test the workflow
+5. Submit a pull request
 
 ## License
 
-Dự án này dựa trên [Windows-ISO-Debloater](https://github.com/itsNileshHere/Windows-ISO-Debloater) và tuân theo license của dự án gốc.
+This project is open source and available under the MIT License.
 
 ## Support
 
-Nếu gặp vấn đề, vui lòng:
-1. Kiểm tra log files
-2. Tạo issue trên GitHub
-3. Cung cấp thông tin chi tiết về lỗi 
+For issues and questions:
+1. Check the workflow logs
+2. Review the troubleshooting section
+3. Create an issue in the repository 

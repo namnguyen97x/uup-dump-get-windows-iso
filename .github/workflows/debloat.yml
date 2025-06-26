@@ -3,389 +3,158 @@ name: Debloat Windows ISO
 on:
   workflow_dispatch:
     inputs:
-      workflow_url:
-        description: 'Workflow run URL (ví dụ: https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572)'
+      source:
+        description: 'Workflow URL hoặc link tải trực tiếp ISO (tự động nhận diện)'
         required: true
         type: string
+        default: 'https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572'
 
 jobs:
-  detect-artifacts:
-    runs-on: windows-2022
-    outputs:
-      workflow_run_id: ${{ steps.parse-url.outputs.run_id }}
-      workflow_url_artifact: ${{ steps.get-artifact-from-url.outputs.artifact_name }}
-      workflow_url_artifact_id: ${{ steps.get-artifact-from-url.outputs.artifact_id }}
+  debloat:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Parse workflow run ID from URL
-        id: parse-url
-        shell: pwsh
+      - name: Dọn dẹp dung lượng runner (quan trọng!)
         run: |
-          $workflowUrl = "${{ github.event.inputs.workflow_url }}"
-          if ($workflowUrl -and $workflowUrl -ne '') {
-            if ($workflowUrl -match '/runs/([0-9]+)') {
-              $runId = $Matches[1]
-              echo "run_id=$runId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-              Write-Host "Parsed workflow run ID: $runId"
-            } else {
-              Write-Host "No run ID found in URL."
-              echo "run_id=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            }
-          } else {
-            echo "run_id=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
 
-      - name: Get artifact from workflow_url
-        id: get-artifact-from-url
-        if: steps.parse-url.outputs.run_id != ''
-        shell: pwsh
+      - name: Cài đặt các công cụ cần thiết
         run: |
-          $token = "${{ secrets.GITHUB_TOKEN }}"
-          $repo = "${{ github.repository }}"
-          $runId = "${{ steps.parse-url.outputs.run_id }}"
-          $headers = @{
-            'Authorization' = "token $token"
-            'Accept' = 'application/vnd.github.v3+json'
-          }
-          $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$runId/artifacts"
-          $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
-          if ($artifacts.artifacts.Count -eq 1) {
-            $artifactName = $artifacts.artifacts[0].name
-            $artifactId = $artifacts.artifacts[0].id
-            echo "artifact_name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            echo "artifact_id=$artifactId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Write-Host "Found artifact: $artifactName (id: $artifactId)"
-          } elseif ($artifacts.artifacts.Count -gt 1) {
-            $artifactName = $artifacts.artifacts[0].name
-            $artifactId = $artifacts.artifacts[0].id
-            echo "artifact_name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            echo "artifact_id=$artifactId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Write-Host "Multiple artifacts found, using: $artifactName (id: $artifactId)"
-          } else {
-            echo "artifact_name=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            echo "artifact_id=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Write-Host "No artifact found in workflow run."
-          }
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            wimtools p7zip-full xorriso
 
-  debloat-iso:
-    needs: detect-artifacts
-    runs-on: windows-2022
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup PowerShell environment
-        shell: pwsh
+      # --- TỰ ĐỘNG XÁC ĐỊNH LOẠI NGUỒN ---
+      - name: Xác định loại nguồn và thông tin
+        id: detect_source
         run: |
-          Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-          Install-Module -Name 7Zip4PowerShell -Force -Scope CurrentUser -ErrorAction SilentlyContinue
-
-      - name: Install 7-Zip
-        shell: pwsh
-        run: |
-          Write-Host "Installing 7-Zip for ISO extraction..."
+          SOURCE="${{ github.event.inputs.source }}"
           
-          # Kiểm tra xem 7-Zip đã được cài đặt chưa
-          $sevenZipPath = Get-Command 7z -ErrorAction SilentlyContinue
-          if ($sevenZipPath) {
-              Write-Host "7-Zip is already installed: $($sevenZipPath.Source)"
-          } else {
-              Write-Host "7-Zip not found, installing via Chocolatey..."
-              
-              # Cài đặt Chocolatey nếu chưa có
-              if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
-                  Write-Host "Installing Chocolatey..."
-                  Set-ExecutionPolicy Bypass -Scope Process -Force
-                  [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-                  iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-              }
-              
-              # Cài đặt 7-Zip
-              choco install 7zip -y
-              
-              # Refresh PATH
-              $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
-              
-              # Kiểm tra lại
-              $sevenZipPath = Get-Command 7z -ErrorAction SilentlyContinue
-              if ($sevenZipPath) {
-                  Write-Host "7-Zip installed successfully: $($sevenZipPath.Source)"
-              } else {
-                  Write-Host "Warning: 7-Zip installation may have failed"
-              }
-          }
+          # Kiểm tra xem có phải là GitHub workflow URL không
+          if [[ "$SOURCE" =~ github\.com.*/actions/runs/[0-9]+ ]]; then
+            echo "source_type=workflow" >> $GITHUB_OUTPUT
+            
+            # Trích xuất thông tin từ URL
+            if [[ "$SOURCE" =~ github\.com/([^/]+/[^/]+)/actions/runs/([0-9]+) ]]; then
+              REPO="${BASH_REMATCH[1]}"
+              RUN_ID="${BASH_REMATCH[2]}"
+              echo "repo=$REPO" >> $GITHUB_OUTPUT
+              echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+              echo "Detected workflow URL: $REPO, Run ID: $RUN_ID"
+            else
+              echo "::error::Invalid GitHub workflow URL format"
+              exit 1
+            fi
+          else
+            echo "source_type=url" >> $GITHUB_OUTPUT
+            echo "url=$SOURCE" >> $GITHUB_OUTPUT
+            echo "Detected direct download URL"
+          fi
 
-      - name: Download and extract artifact from workflow_url (no gh CLI)
-        if: needs.detect-artifacts.outputs.workflow_run_id != ''
-        shell: pwsh
+      # --- LẤY FILE ISO ---
+      - name: Lấy file ISO từ URL trực tiếp
+        if: steps.detect_source.outputs.source_type == 'url'
         run: |
-          $ErrorActionPreference = 'Stop'
-          $token = "${{ secrets.GITHUB_TOKEN }}"
-          $repo = "${{ github.repository }}"
-          $artifactId = "${{ needs.detect-artifacts.outputs.workflow_url_artifact_id }}"
-          $artifactName = "${{ needs.detect-artifacts.outputs.workflow_url_artifact }}"
-          if (-not $artifactId -or -not $artifactName) {
-            Write-Error "No artifact found for workflow run."
+          echo ">>> Đang tải ISO từ URL: ${{ steps.detect_source.outputs.url }}"
+          wget -q -O windows.iso "${{ steps.detect_source.outputs.url }}"
+          echo "ISO_PATH=windows.iso" >> $GITHUB_ENV
+
+      - name: Lấy file ISO từ Workflow Artifact
+        if: steps.detect_source.outputs.source_type == 'workflow'
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repo: ${{ steps.detect_source.outputs.repo }}
+          run_id: ${{ steps.detect_source.outputs.run_id }}
+          path: ./downloaded_artifact
+          
+      - name: Tìm file ISO trong artifact đã tải
+        if: steps.detect_source.outputs.source_type == 'workflow'
+        run: |
+          ISO_FILE=$(find ./downloaded_artifact -name "*.iso" -print -quit)
+          if [ -z "$ISO_FILE" ]; then
+            echo "::error::Không tìm thấy file .iso nào trong artifact!"
             exit 1
-          }
-          $headers = @{ 'Authorization' = "token $token"; 'Accept' = 'application/vnd.github.v3+json' }
-          $downloadUrl = "https://api.github.com/repos/$repo/actions/artifacts/$artifactId/zip"
-          $outputDir = "./iso-input"
-          $zipPath = "$outputDir/$artifactName.zip"
-          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-          Write-Host "Downloading artifact zip: $artifactName ($artifactId)"
-          Invoke-RestMethod -Uri $downloadUrl -Headers $headers -OutFile $zipPath
-          Write-Host "Extracting artifact zip..."
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $outputDir)
-          Remove-Item $zipPath
-          Write-Host "Artifact extracted to $outputDir"
-
-      - name: List downloaded files
-        shell: pwsh
+          fi
+          echo ">>> Tìm thấy file ISO: $ISO_FILE"
+          echo "ISO_PATH=${ISO_FILE}" >> $GITHUB_ENV
+      
+      # --- XÁC ĐỊNH TÊN CƠ SỞ CHO FILE ĐẦU RA ---
+      - name: Determine Output Basename
+        id: name_generator
         run: |
-          Write-Host "Contents of iso-input directory:"
-          Get-ChildItem -Path "./iso-input" -Recurse | Format-Table Name, Length, LastWriteTime
+          if [ "${{ steps.detect_source.outputs.source_type }}" == "workflow" ]; then
+            # Lấy tên artifact từ GitHub API
+            TOKEN="${{ secrets.GITHUB_TOKEN }}"
+            REPO="${{ steps.detect_source.outputs.repo }}"
+            RUN_ID="${{ steps.detect_source.outputs.run_id }}"
+            
+            # Gọi API để lấy thông tin artifacts
+            ARTIFACTS_JSON=$(curl -s -H "Authorization: token $TOKEN" \
+              "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts")
+            
+            # Lấy tên artifact đầu tiên
+            ARTIFACT_NAME=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[0].name // "Windows-ISO"')
+            echo "BASENAME=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+            echo "Using artifact name: $ARTIFACT_NAME"
+          else
+            # Nếu từ URL, lấy tên file từ URL và bỏ đuôi .iso
+            URL_FILENAME=$(basename "${{ steps.detect_source.outputs.url }}")
+            BASENAME="${URL_FILENAME%.*}"
+            if [ -z "$BASENAME" ] || [ "$BASENAME" = "$URL_FILENAME" ]; then
+              BASENAME="Windows-ISO"
+            fi
+            echo "BASENAME=$BASENAME" >> $GITHUB_OUTPUT
+            echo "Using URL filename: $BASENAME"
+          fi
 
-      - name: Test debloat script syntax
-        shell: pwsh
+      - name: Cấp quyền thực thi cho script
+        run: chmod +x debloat_windows.sh
+
+      # --- CHẠY SCRIPT DEBLOAT ---
+      - name: Chạy script Debloat
         run: |
-          Write-Host "Testing debloat script syntax..."
-          
-          # Test if advanced script file exists
-          if (!(Test-Path "./scripts/debloat-windows-iso.ps1")) {
-              Write-Error "Advanced script file not found: ./scripts/debloat-windows-iso.ps1"
-              exit 1
-          }
-          
-          # Test if simple script file exists
-          if (!(Test-Path "./scripts/simple-debloat.ps1")) {
-              Write-Error "Simple script file not found: ./scripts/simple-debloat.ps1"
-              exit 1
-          }
-          
-          # Test advanced script syntax by loading it
-          try {
-              $scriptContent = Get-Content "./scripts/debloat-windows-iso.ps1" -Raw
-              $null = [System.Management.Automation.PSParser]::Tokenize($scriptContent, [ref]$null)
-              Write-Host "Advanced script syntax validation passed!"
-          }
-          catch {
-              Write-Error "Advanced script syntax error: $($_.Exception.Message)"
-              exit 1
-          }
-          
-          # Test simple script syntax by loading it
-          try {
-              $scriptContent = Get-Content "./scripts/simple-debloat.ps1" -Raw
-              $null = [System.Management.Automation.PSParser]::Tokenize($scriptContent, [ref]$null)
-              Write-Host "Simple script syntax validation passed!"
-          }
-          catch {
-              Write-Error "Simple script syntax error: $($_.Exception.Message)"
-              exit 1
-          }
-          
-          Write-Host "All script syntax tests passed!"
+          # Truyền vào 2 tham số: đường dẫn ISO và tên cơ sở
+          ./debloat_windows.sh "${{ env.ISO_PATH }}" "${{ steps.name_generator.outputs.BASENAME }}"
 
-      - name: Test debloat script execution
-        shell: pwsh
-        run: |
-          Write-Host "Testing debloat script execution with dry-run..."
-          
-          # Test if script can be loaded and executed
-          try {
-              # Test script loading
-              $scriptPath = "./scripts/debloat-windows-iso.ps1"
-              $scriptContent = Get-Content $scriptPath -Raw
-              
-              # Test parameter validation
-              $params = @{
-                  InputPath = "./iso-input"
-                  OutputPath = "./iso-output"
-                  WindowsVersion = "11"
-                  IsVerbose = $true
-              }
-              
-              Write-Host "Script loaded successfully"
-              Write-Host "Parameters validated: $($params | ConvertTo-Json)"
-              
-              # Test script execution with dry-run
-              Write-Host "Testing script execution with dry-run..."
-              $dryRunResult = & pwsh -Command "& './scripts/debloat-windows-iso.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose -DryRun"
-              $dryRunExitCode = $LASTEXITCODE
-              
-              if ($dryRunExitCode -eq 0) {
-                  Write-Host "Script dry-run test passed!"
-              } else {
-                  Write-Error "Script dry-run test failed with exit code: $dryRunExitCode"
-                  exit $dryRunExitCode
-              }
-              
-              Write-Host "Script execution test passed!"
-          }
-          catch {
-              Write-Error "Script execution test failed: $($_.Exception.Message)"
-              exit 1
-          }
-
-      - name: Run Windows ISO Debloat
-        shell: pwsh
-        run: |
-          Write-Host "Starting advanced Windows ISO debloat process (mount and debloat)..."
-          
-          # Tạo thư mục output nếu chưa tồn tại
-          if (!(Test-Path "./iso-output")) {
-              New-Item -ItemType Directory -Path "./iso-output" -Force | Out-Null
-          }
-          
-          # Chạy script với quyền admin và verbose logging
-          $result = & pwsh -Command "& './scripts/debloat-windows-iso.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose"
-          $exitCode = $LASTEXITCODE
-          
-          if ($exitCode -ne 0) {
-              Write-Error "Advanced debloat script failed with exit code: $exitCode"
-              
-              # Hiển thị log files để debug
-              Write-Host "=== ADVANCED DEBLOAT LOG ==="
-              if (Test-Path "./iso-output/debloat.log") {
-                  Get-Content "./iso-output/debloat.log" | Write-Host
-              } else {
-                  Write-Host "No debloat.log found"
-              }
-              
-              Write-Host "=== ADVANCED ERROR LOG ==="
-              if (Test-Path "./iso-output/debloat-errors.log") {
-                  Get-Content "./iso-output/debloat-errors.log" | Write-Host
-              } else {
-                  Write-Host "No debloat-errors.log found"
-              }
-              
-              # Fallback to simple debloat
-              Write-Host "Falling back to simple debloat script..."
-              $simpleResult = & pwsh -Command "& './scripts/simple-debloat.ps1' -InputPath './iso-input' -OutputPath './iso-output' -WindowsVersion '11' -IsVerbose"
-              $simpleExitCode = $LASTEXITCODE
-              
-              if ($simpleExitCode -ne 0) {
-                  Write-Error "Both advanced and simple debloat scripts failed!"
-                  exit $simpleExitCode
-              } else {
-                  Write-Host "Simple debloat completed successfully as fallback!"
-              }
-          } else {
-              Write-Host "Advanced debloat process completed successfully!"
-          }
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Show advanced debloat logs immediately
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== IMMEDIATE DEBUG - ADVANCED DEBLOAT LOG ==="
-          if (Test-Path "./iso-output/debloat.log") {
-              Get-Content "./iso-output/debloat.log"
-          } else {
-              Write-Host "No debloat.log found"
-          }
-          
-          Write-Host "=== IMMEDIATE DEBUG - ADVANCED ERROR LOG ==="
-          if (Test-Path "./iso-output/debloat-errors.log") {
-              Get-Content "./iso-output/debloat-errors.log"
-          } else {
-              Write-Host "No debloat-errors.log found"
-          }
-          
-          Write-Host "=== IMMEDIATE DEBUG - DIRECTORY CONTENTS ==="
-          if (Test-Path "./iso-output") {
-              Get-ChildItem -Path "./iso-output" -Recurse | Format-Table Name, Length, LastWriteTime
-          } else {
-              Write-Host "No iso-output directory found"
-          }
-
-      - name: Show debloat logs
-        if: always()
-        shell: pwsh
-        run: |
-          Write-Host "=== FINAL DEBLOAT LOG ==="
-          if (Test-Path "./iso-output/debloat.log") {
-              Get-Content "./iso-output/debloat.log"
-          } else {
-              Write-Host "No debloat.log found"
-          }
-          
-          Write-Host "=== FINAL ERROR LOG ==="
-          if (Test-Path "./iso-output/debloat-errors.log") {
-              Get-Content "./iso-output/debloat-errors.log"
-          } else {
-              Write-Host "No debloat-errors.log found"
-          }
-
-      - name: Show disk space after debloat
-        shell: pwsh
-        run: |
-          Write-Host "Available disk space after debloat:"
-          Get-PSDrive -PSProvider FileSystem
-
-      - name: List debloated files
-        shell: pwsh
-        run: |
-          Write-Host "Contents of iso-output directory:"
-          Get-ChildItem -Path "./iso-output" -Recurse | Format-Table Name, Length, LastWriteTime
-
-      - name: Upload debloated ISO artifact
+      - name: Tải lên ISO đã debloat
         uses: actions/upload-artifact@v4
         with:
-          name: debloated-windows-iso
-          path: |
-            ./iso-output/*.iso
-            ./iso-output/*.json
-            ./iso-output/*.xml
-            ./iso-output/*.reg
-            ./iso-output/*.ps1
-            ./iso-output/*.md
-            ./iso-output/*.txt
-          retention-days: 30
+          name: debloated-${{ steps.name_generator.outputs.BASENAME }} # Đặt tên cho artifact tải lên
+          path: debloated-*.iso # Wildcard vẫn hoạt động tốt
+          retention-days: 5
 
-      - name: Create debloat summary
-        shell: pwsh
+      - name: Tạo summary
         run: |
-          $inputFiles = Get-ChildItem -Path "./iso-input" -File
-          $outputFiles = Get-ChildItem -Path "./iso-output" -File
-          $inputSize = ($inputFiles | Measure-Object -Property Length -Sum).Sum
-          $outputSize = ($outputFiles | Measure-Object -Property Length -Sum).Sum
-          $sizeReduction = if ($inputSize -gt 0) { [math]::Round((($inputSize - $outputSize) / $inputSize) * 100, 2) } else { 0 }
-          # Tạo summary dạng text thuần, không dùng markdown code block hoặc backtick
-          $summary = "Windows ISO Debloat Summary (Advanced - Mount and Debloat)`n`n"
-          $summary += "Input Files:`n"
-          foreach ($f in $inputFiles) { $summary += "- $($f.Name) ($([math]::Round($f.Length / 1MB, 2)) MB)`n" }
-          $summary += "`nOutput Files:`n"
-          foreach ($f in $outputFiles) { $summary += "- $($f.Name) ($([math]::Round($f.Length / 1MB, 2)) MB)`n" }
-          $summary += "`nSize Reduction:`n"
-          $summary += "- Original Size: $([math]::Round($inputSize / 1MB, 2)) MB`n"
-          $summary += "- Debloated Size: $([math]::Round($outputSize / 1MB, 2)) MB`n"
-          $summary += "- Reduction: $sizeReduction%`n"
-          $summary += "`nAdvanced Debloat Features Applied:`n"
-          $summary += "- Mounted Windows ISO image`n"
-          $summary += "- Removed Windows components via DISM`n"
-          $summary += "- Removed bloatware apps via DISM`n"
-          $summary += "- Disabled telemetry and tracking`n"
-          $summary += "- Created unattended setup configuration`n"
-          $summary += "- Applied OOBE bypass settings`n"
-          $summary += "- Optimized for privacy and performance`n"
-          $summary += "- Committed changes back to image`n"
-          $summary += "`nUsage Instructions:`n"
-          $summary += "1. Burn ISO to USB/DVD: Use the debloated ISO file`n"
-          $summary += "2. Automatic Setup: Installation will proceed without user interaction`n"
-          $summary += "3. Post-Install: Run setup-debloat.ps1 for additional optimizations`n"
-          $summary += "4. Registry Settings: Import debloat-settings.reg for telemetry removal`n"
-          $summary += "`nFiles Included:`n"
-          $summary += "- debloated-*.iso: Optimized Windows ISO (real debloat)`n"
-          $summary += "- unattend.xml: Unattended setup configuration`n"
-          $summary += "- debloat-settings.reg: Registry optimizations`n"
-          $summary += "- setup-debloat.ps1: Post-installation script`n"
-          $summary += "- README.md: Detailed instructions`n"
-          $summary += "- *.json: Debloat information`n"
-          Add-Content $env:GITHUB_STEP_SUMMARY $summary 
+          echo "## Windows ISO Debloat Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Type:** ${{ steps.detect_source.outputs.source_type }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.detect_source.outputs.source_type }}" == "workflow" ]; then
+            echo "**Repository:** ${{ steps.detect_source.outputs.repo }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Run ID:** ${{ steps.detect_source.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Source URL:** ${{ steps.detect_source.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Output File:** debloated-${{ steps.name_generator.outputs.BASENAME }}.iso" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Removed Components:" >> $GITHUB_STEP_SUMMARY
+          echo "- Cortana" >> $GITHUB_STEP_SUMMARY
+          echo "- Bing News & Weather" >> $GITHUB_STEP_SUMMARY
+          echo "- Get Help & Get Started" >> $GITHUB_STEP_SUMMARY
+          echo "- People, Skype, Alarms & Clock" >> $GITHUB_STEP_SUMMARY
+          echo "- Camera, Mail and Calendar" >> $GITHUB_STEP_SUMMARY
+          echo "- Feedback Hub, Maps, Voice Recorder" >> $GITHUB_STEP_SUMMARY
+          echo "- Xbox Apps" >> $GITHUB_STEP_SUMMARY
+          echo "- Various Microsoft Store apps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Usage:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the debloated ISO artifact" >> $GITHUB_STEP_SUMMARY
+          echo "2. Burn to USB or DVD" >> $GITHUB_STEP_SUMMARY
+          echo "3. Install Windows with reduced bloatware" >> $GITHUB_STEP_SUMMARY 

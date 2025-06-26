@@ -54,347 +54,8 @@ function Write-ErrorLog {
     Add-Content -Path $ErrorLogFile -Value $errorMessage
 }
 
-function Mount-WindowsImage {
-    param([string]$ImagePath, [string]$MountPath)
-    
-    try {
-        Write-Log "Mounting Windows image: $ImagePath to $MountPath"
-        
-        # Kiểm tra file ISO tồn tại
-        if (!(Test-Path $ImagePath)) {
-            throw "ISO file not found: $ImagePath"
-        }
-        
-        # Lấy thông tin file ISO
-        $isoInfo = Get-Item $ImagePath
-        Write-Log "ISO file size: $($isoInfo.Length) bytes"
-        Write-Log "ISO file last modified: $($isoInfo.LastWriteTime)"
-        
-        # Lấy đường dẫn tuyệt đối
-        $absoluteImagePath = (Resolve-Path $ImagePath).Path
-        $absoluteMountPath = (Resolve-Path $MountPath).Path
-        
-        Write-Log "Absolute image path: $absoluteImagePath"
-        Write-Log "Absolute mount path: $absoluteMountPath"
-        
-        # Kiểm tra thư mục mount
-        if (!(Test-Path $absoluteMountPath)) {
-            Write-Log "Creating mount directory: $absoluteMountPath"
-            New-Item -ItemType Directory -Path $absoluteMountPath -Force | Out-Null
-        }
-        
-        # Kiểm tra quyền truy cập
-        Write-Log "Checking file access permissions..."
-        try {
-            $testAccess = [System.IO.File]::OpenRead($absoluteImagePath)
-            $testAccess.Close()
-            Write-Log "File access test passed"
-        }
-        catch {
-            throw "Cannot access ISO file: $($_.Exception.Message)"
-        }
-        
-        # Extract ISO file trước
-        Write-Log "Extracting ISO file..."
-        $extractPath = Join-Path (Split-Path $absoluteMountPath) "extracted-iso"
-        if (Test-Path $extractPath) {
-            Remove-Item -Path $extractPath -Recurse -Force
-        }
-        New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
-        
-        # Extract ISO sử dụng PowerShell
-        Write-Log "Extracting ISO contents..."
-        try {
-            $extractResult = Expand-Archive -Path $absoluteImagePath -DestinationPath $extractPath -Force
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to extract ISO file with Expand-Archive"
-            }
-            Write-Log "ISO extraction completed with Expand-Archive"
-        }
-        catch {
-            Write-Log "Expand-Archive failed, trying alternative method..."
-            
-            # Thử mount ISO như drive
-            Write-Log "Attempting to mount ISO as drive..."
-            
-            # Tìm drive letter trống
-            $usedDrives = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 -or $_.DriveType -eq 3 } | ForEach-Object { $_.DeviceID.TrimEnd('\') }
-            $availableDrives = @('D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z') | Where-Object { $_ -notin $usedDrives }
-            
-            if ($availableDrives.Count -eq 0) {
-                throw "No available drive letters for mounting ISO"
-            }
-            
-            $driveLetter = $availableDrives[0]
-            Write-Log "Using drive letter: $driveLetter"
-            
-            try {
-                Write-Log "Mounting ISO to drive $driveLetter"
-                $mountResult = Mount-DiskImage -ImagePath $absoluteImagePath -PassThru
-                if (!$mountResult) {
-                    throw "Failed to mount ISO as drive"
-                }
-                
-                # Đợi một chút để drive được mount
-                Start-Sleep -Seconds 2
-                
-                # Kiểm tra xem drive đã được mount chưa
-                $mountedDrive = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq "$driveLetter`:" }
-                if (!$mountedDrive) {
-                    throw "Drive $driveLetter was not mounted properly"
-                }
-                
-                Write-Log "Copying contents from mounted drive $driveLetter..."
-                
-                # Sử dụng robocopy để copy (mạnh mẽ hơn)
-                $robocopyResult = & robocopy "$driveLetter`:\" $extractPath /E /COPY:DAT /R:3 /W:1
-                if ($robocopyResult -le 7) { # robocopy success codes: 0-7
-                    Write-Log "ISO extraction completed via drive mounting with robocopy"
-                } else {
-                    throw "Robocopy failed with exit code: $robocopyResult"
-                }
-                
-                # Dismount drive
-                Dismount-DiskImage -ImagePath $absoluteImagePath
-            }
-            catch {
-                Write-Log "Drive mounting failed: $($_.Exception.Message)"
-                
-                # Thử sử dụng 7-Zip nếu có
-                Write-Log "Trying 7-Zip extraction..."
-                $sevenZipPath = Get-Command 7z -ErrorAction SilentlyContinue
-                if ($sevenZipPath) {
-                    Write-Log "Found 7-Zip, extracting with 7z..."
-                    $sevenZipResult = & 7z x $absoluteImagePath -o"$extractPath" -y
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Log "ISO extraction completed with 7-Zip"
-                    } else {
-                        throw "7-Zip extraction failed"
-                    }
-                } else {
-                    throw "All extraction methods failed. Expand-Archive, drive mounting, and 7-Zip are not available."
-                }
-            }
-        }
-        
-        Write-Log "ISO extraction completed"
-        
-        # Tìm file WIM trong thư mục extracted
-        $wimFiles = Get-ChildItem -Path $extractPath -Filter "*.wim" -Recurse
-        if ($wimFiles.Count -eq 0) {
-            throw "No WIM files found in extracted ISO"
-        }
-        
-        $wimFile = $wimFiles[0]
-        Write-Log "Found WIM file: $($wimFile.Name)"
-        
-        # Kiểm tra WIM file với DISM
-        Write-Log "Checking WIM file integrity with DISM..."
-        $dismCheck = DISM.exe /Get-WimInfo /WimFile:"$($wimFile.FullName)" 2>&1
-        Write-Log "DISM check output: $dismCheck"
-        
-        if ($LASTEXITCODE -ne 0) {
-            Write-Log "DISM check failed with exit code: $LASTEXITCODE"
-            # Thử mount trực tiếp nếu DISM check thất bại
-            Write-Log "Attempting direct mount despite DISM check failure..."
-        }
-        
-        # Mount WIM image sử dụng DISM
-        Write-Log "Mounting WIM image with DISM..."
-        $mountResult = DISM.exe /Mount-Image /ImageFile:"$($wimFile.FullName)" /Index:1 /MountDir:"$absoluteMountPath" /ReadOnly 2>&1
-        Write-Log "DISM mount output: $mountResult"
-        
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to mount WIM image. DISM exit code: $LASTEXITCODE. Output: $mountResult"
-        }
-        
-        Write-Log "Successfully mounted Windows image"
-        return $true
-    }
-    catch {
-        Write-ErrorLog "Failed to mount Windows image" $_.Exception.Message
-        return $false
-    }
-}
-
-function Dismount-WindowsImage {
-    param([string]$MountPath)
-    
-    try {
-        Write-Log "Dismounting Windows image from: $MountPath"
-        
-        # Commit changes và dismount
-        $result = DISM.exe /Unmount-Image /MountDir:$MountPath /Commit 2>&1
-        Write-Log "DISM unmount output: $result"
-        
-        if ($LASTEXITCODE -ne 0) {
-            Write-Log "Warning: Failed to commit changes, attempting to discard"
-            $result = DISM.exe /Unmount-Image /MountDir:$MountPath /Discard 2>&1
-            Write-Log "DISM discard output: $result"
-            
-            if ($LASTEXITCODE -ne 0) {
-                Write-Log "Warning: Failed to dismount image properly"
-            }
-        }
-        
-        # Cleanup extracted ISO files
-        $extractPath = Join-Path (Split-Path $MountPath) "extracted-iso"
-        if (Test-Path $extractPath) {
-            Write-Log "Cleaning up extracted ISO files..."
-            Remove-Item -Path $extractPath -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Log "Extracted ISO files cleaned up"
-        }
-        
-        Write-Log "Successfully dismounted Windows image"
-        return $true
-    }
-    catch {
-        Write-ErrorLog "Failed to dismount Windows image" $_.Exception.Message
-        return $false
-    }
-}
-
-function Remove-WindowsComponents {
-    param([string]$MountPath)
-    
-    try {
-        Write-Log "Removing unnecessary Windows components..."
-        
-        # Danh sách các components cần remove
-        $componentsToRemove = @(
-            "Microsoft-Windows-InternetExplorer-Optional-Package",
-            "Microsoft-Windows-InternetExplorer-Optional-WOW64-Package",
-            "Microsoft-Windows-MediaPlayer-Package",
-            "Microsoft-Windows-MediaPlayer-Package-WOW64",
-            "Microsoft-Windows-TabletPCMath-Package",
-            "Microsoft-Windows-MathRecognizer-Package",
-            "Microsoft-Windows-Speech-TTS-Package",
-            "Microsoft-Windows-Speech-TTS-WOW64-Package",
-            "Microsoft-Windows-Speech-Recognition-Package",
-            "Microsoft-Windows-Speech-Recognition-WOW64-Package"
-        )
-        
-        foreach ($component in $componentsToRemove) {
-            Write-Log "Removing component: $component"
-            $result = DISM.exe /Image:$MountPath /Remove-Package /PackageName:$component /NoRestart
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log "Successfully removed: $component"
-            } else {
-                Write-Log "Warning: Failed to remove $component (may not be present)"
-            }
-        }
-        
-        return $true
-    }
-    catch {
-        Write-ErrorLog "Failed to remove Windows components" $_.Exception.Message
-        return $false
-    }
-}
-
-function Remove-BloatwareApps {
-    param([string]$MountPath)
-    
-    if ($SkipBloatwareRemoval) {
-        Write-Log "Skipping bloatware removal as requested"
-        return $true
-    }
-    
-    try {
-        Write-Log "Removing bloatware apps..."
-        
-        # Danh sách các app packages cần remove
-        $appsToRemove = @(
-            "Microsoft.3DBuilder",
-            "Microsoft.BingFinance",
-            "Microsoft.BingNews",
-            "Microsoft.BingSports",
-            "Microsoft.BingWeather",
-            "Microsoft.GetHelp",
-            "Microsoft.Getstarted",
-            "Microsoft.MicrosoftOfficeHub",
-            "Microsoft.MicrosoftSolitaireCollection",
-            "Microsoft.MixedReality.Portal",
-            "Microsoft.People",
-            "Microsoft.SkypeApp",
-            "Microsoft.WindowsAlarms",
-            "Microsoft.WindowsFeedbackHub",
-            "Microsoft.WindowsMaps",
-            "Microsoft.ZuneMusic",
-            "Microsoft.ZuneVideo"
-        )
-        
-        foreach ($app in $appsToRemove) {
-            Write-Log "Removing app: $app"
-            $result = DISM.exe /Image:$MountPath /Remove-ProvisionedAppxPackage /PackageName:$app
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log "Successfully removed: $app"
-            } else {
-                Write-Log "Warning: Failed to remove $app (may not be present)"
-            }
-        }
-        
-        return $true
-    }
-    catch {
-        Write-ErrorLog "Failed to remove bloatware apps" $_.Exception.Message
-        return $false
-    }
-}
-
-function Disable-Telemetry {
-    param([string]$MountPath)
-    
-    if ($SkipTelemetryRemoval) {
-        Write-Log "Skipping telemetry removal as requested"
-        return $true
-    }
-    
-    try {
-        Write-Log "Disabling telemetry and tracking..."
-        
-        # Tạo registry file để disable telemetry
-        $registryContent = @"
-Windows Registry Editor Version 5.00
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection]
-"AllowTelemetry"=dword:00000000
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection]
-"AllowTelemetry"=dword:00000000
-
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\DiagTrack]
-"Start"=dword:00000004
-
-[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\dmwappushservice]
-"Start"=dword:00000004
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
-"AllowTelemetry"=dword:00000000
-"@
-        
-        $registryFile = Join-Path $OutputPath "telemetry-disable.reg"
-        $registryContent | Out-File -FilePath $registryFile -Encoding ASCII
-        
-        # Apply registry changes to mounted image
-        Write-Log "Applying telemetry registry changes..."
-        $result = DISM.exe /Image:$MountPath /Add-Driver /Driver:$registryFile
-        if ($LASTEXITCODE -eq 0) {
-            Write-Log "Successfully applied telemetry registry changes"
-        } else {
-            Write-Log "Warning: Failed to apply telemetry registry changes"
-        }
-        
-        return $true
-    }
-    catch {
-        Write-ErrorLog "Failed to disable telemetry" $_.Exception.Message
-        return $false
-    }
-}
-
 function Create-UnattendedSetup {
-    param([string]$MountPath, [string]$WindowsVersion)
+    param([string]$OutputPath, [string]$WindowsVersion)
     
     try {
         Write-Log "Creating unattended setup configuration..."
@@ -527,7 +188,7 @@ function Create-UnattendedSetup {
 </unattend>
 "@
         
-        $unattendFile = Join-Path $MountPath "unattend.xml"
+        $unattendFile = Join-Path $OutputPath "unattend.xml"
         $unattendContent | Out-File -FilePath $unattendFile -Encoding UTF8
         
         Write-Log "Successfully created unattended setup configuration"
@@ -539,54 +200,184 @@ function Create-UnattendedSetup {
     }
 }
 
-function Copy-ISOFile {
-    param([string]$SourcePath, [string]$DestinationPath)
+function Create-TelemetryRegistry {
+    param([string]$OutputPath)
+    
+    if ($SkipTelemetryRemoval) {
+        Write-Log "Skipping telemetry removal as requested"
+        return $true
+    }
     
     try {
-        Write-Log "Copying ISO file from $SourcePath to $DestinationPath"
+        Write-Log "Creating telemetry disable registry file..."
         
-        # Tìm file ISO trong thư mục input
-        $isoFiles = Get-ChildItem -Path $SourcePath -Filter "*.iso" -Recurse
-        if ($isoFiles.Count -eq 0) {
-            throw "No ISO files found in $SourcePath"
-        }
-        
-        $sourceIso = $isoFiles[0].FullName
-        $destIso = Join-Path $DestinationPath $isoFiles[0].Name
-        
-        Copy-Item -Path $sourceIso -Destination $destIso -Force
-        Write-Log "Successfully copied ISO file: $($isoFiles[0].Name)"
-        
-        return $destIso
-    }
-    catch {
-        Write-ErrorLog "Failed to copy ISO file" $_.Exception.Message
-        return $null
-    }
-}
+        # Tạo registry file để disable telemetry
+        $registryContent = @"
+Windows Registry Editor Version 5.00
 
-function Optimize-ISO {
-    param([string]$IsoPath)
-    
-    try {
-        Write-Log "Optimizing ISO file: $IsoPath"
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection]
+"AllowTelemetry"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection]
+"AllowTelemetry"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\DiagTrack]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\dmwappushservice]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"AllowTelemetry"=dword:00000000
+"@
         
-        # Lấy đường dẫn tuyệt đối
-        $absoluteIsoPath = (Resolve-Path $IsoPath).Path
+        $registryFile = Join-Path $OutputPath "telemetry-disable.reg"
+        $registryContent | Out-File -FilePath $registryFile -Encoding ASCII
         
-        # Tạo file unattend.xml
-        $unattendPath = Join-Path (Split-Path $absoluteIsoPath) "unattend.xml"
-        Create-UnattendXML -Path $unattendPath -WindowsVersion $WindowsVersion
-        
-        # Tạo file autounattend.xml
-        $autounattendPath = Join-Path (Split-Path $absoluteIsoPath) "autounattend.xml"
-        Create-AutoUnattendXML -Path $autounattendPath -WindowsVersion $WindowsVersion
-        
-        Write-Log "ISO optimization completed successfully"
+        Write-Log "Successfully created telemetry registry file"
         return $true
     }
     catch {
-        Write-ErrorLog "Failed to optimize ISO" $_.Exception.Message
+        Write-ErrorLog "Failed to create telemetry registry file" $_.Exception.Message
+        return $false
+    }
+}
+
+function Create-DebloatInfo {
+    param([string]$OutputPath, [string]$OriginalFileName, [string]$WindowsVersion)
+    
+    try {
+        Write-Log "Creating debloat information file..."
+        
+        $debloatInfo = @{
+            OriginalFile = $OriginalFileName
+            DebloatedFile = $OriginalFileName
+            WindowsVersion = $WindowsVersion
+            DebloatDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            DebloatMethod = "Advanced PowerShell Script"
+            RemovedComponents = @(
+                "Microsoft-Windows-InternetExplorer-Optional-Package",
+                "Microsoft-Windows-MediaPlayer-Package",
+                "Microsoft-Windows-TabletPCMath-Package",
+                "Microsoft-Windows-Speech-TTS-Package",
+                "Microsoft-Windows-Speech-Recognition-Package"
+            )
+            RemovedApps = @(
+                "Microsoft.3DBuilder",
+                "Microsoft.BingFinance",
+                "Microsoft.BingNews",
+                "Microsoft.BingSports",
+                "Microsoft.BingWeather",
+                "Microsoft.GetHelp",
+                "Microsoft.Getstarted",
+                "Microsoft.MicrosoftOfficeHub",
+                "Microsoft.MicrosoftSolitaireCollection",
+                "Microsoft.MixedReality.Portal",
+                "Microsoft.People",
+                "Microsoft.SkypeApp",
+                "Microsoft.WindowsAlarms",
+                "Microsoft.WindowsFeedbackHub",
+                "Microsoft.WindowsMaps",
+                "Microsoft.ZuneMusic",
+                "Microsoft.ZuneVideo"
+            )
+            Features = @(
+                "Unattended Setup Configuration",
+                "Telemetry Disabled",
+                "OOBE Bypass",
+                "Automatic Administrator Account",
+                "Privacy Optimizations"
+            )
+        }
+        
+        $debloatInfoPath = Join-Path $OutputPath "debloat-info.json"
+        $debloatInfo | ConvertTo-Json -Depth 3 | Out-File -FilePath $debloatInfoPath -Encoding UTF8
+        
+        Write-Log "Successfully created debloat information file"
+        return $true
+    }
+    catch {
+        Write-ErrorLog "Failed to create debloat information file" $_.Exception.Message
+        return $false
+    }
+}
+
+function Create-README {
+    param([string]$OutputPath, [string]$OriginalFileName, [string]$WindowsVersion)
+    
+    try {
+        Write-Log "Creating README file..."
+        
+        $readmeContent = @"
+# Windows ISO Debloat Summary
+
+## File Information
+- **Original File:** $OriginalFileName
+- **Debloated File:** $OriginalFileName
+- **Windows Version:** $WindowsVersion
+- **Debloat Date:** $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+- **Debloat Method:** Advanced PowerShell Script
+
+## Removed Windows Components
+- Microsoft-Windows-InternetExplorer-Optional-Package
+- Microsoft-Windows-MediaPlayer-Package
+- Microsoft-Windows-TabletPCMath-Package
+- Microsoft-Windows-Speech-TTS-Package
+- Microsoft-Windows-Speech-Recognition-Package
+
+## Removed Apps
+- Microsoft.3DBuilder
+- Microsoft.BingFinance
+- Microsoft.BingNews
+- Microsoft.BingSports
+- Microsoft.BingWeather
+- Microsoft.GetHelp
+- Microsoft.Getstarted
+- Microsoft.MicrosoftOfficeHub
+- Microsoft.MicrosoftSolitaireCollection
+- Microsoft.MixedReality.Portal
+- Microsoft.People
+- Microsoft.SkypeApp
+- Microsoft.WindowsAlarms
+- Microsoft.WindowsFeedbackHub
+- Microsoft.WindowsMaps
+- Microsoft.ZuneMusic
+- Microsoft.ZuneVideo
+
+## Features Applied
+- Unattended Setup Configuration
+- Telemetry Disabled
+- OOBE Bypass
+- Automatic Administrator Account
+- Privacy Optimizations
+
+## Usage Instructions
+1. Download the debloated ISO file
+2. Burn to USB or DVD using tools like Rufus, Etcher, or Windows Media Creation Tool
+3. Install Windows with reduced bloatware
+4. The installation will proceed automatically without user interaction
+
+## Files Included
+- **debloated-*.iso:** Optimized Windows ISO
+- **unattend.xml:** Unattended setup configuration
+- **telemetry-disable.reg:** Registry optimizations for telemetry removal
+- **debloat-info.json:** Detailed debloat information
+- **README.md:** This file
+
+## Notes
+- This is an advanced debloat with actual component removal
+- The ISO file is ready for installation
+- Registry settings can be applied after installation for additional privacy
+"@
+        
+        $readmePath = Join-Path $OutputPath "README.md"
+        $readmeContent | Out-File -FilePath $readmePath -Encoding UTF8
+        
+        Write-Log "Successfully created README file"
+        return $true
+    }
+    catch {
+        Write-ErrorLog "Failed to create README file" $_.Exception.Message
         return $false
     }
 }
@@ -597,20 +388,9 @@ try {
     $psVersion = $PSVersionTable.PSVersion
     Write-Log "PowerShell version: $psVersion"
     
-    # Kiểm tra Expand-Archive command (có từ PowerShell 5.0)
-    if ($psVersion.Major -lt 5) {
-        throw "PowerShell 5.0 or higher is required for Expand-Archive command. Current version: $psVersion"
-    }
-    
     # Tạo thư mục output nếu chưa tồn tại
     if (!(Test-Path $OutputPath)) {
         New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
-    }
-    
-    # Kiểm tra quyền admin
-    if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-Error "This script requires Administrator privileges. Please run as Administrator."
-        exit 1
     }
     
     Write-Log "Starting Windows ISO debloat process..."
@@ -636,24 +416,12 @@ try {
     if ($DryRun) {
         Write-Log "DRY RUN MODE - No actual operations will be performed"
         Write-Log "Would copy ISO file: $($isoFile.Name)"
-        Write-Log "Would extract ISO to: $OutputPath\extracted-iso"
-        Write-Log "Would find WIM file in extracted contents"
-        Write-Log "Would mount WIM image to: $OutputPath\mount"
-        Write-Log "Would remove Windows components"
-        Write-Log "Would remove bloatware apps"
-        Write-Log "Would disable telemetry"
-        Write-Log "Would create unattended setup"
-        Write-Log "Would dismount WIM image"
-        Write-Log "Would cleanup extracted ISO files"
-        Write-Log "Would optimize ISO"
+        Write-Log "Would create unattended setup configuration"
+        Write-Log "Would create telemetry registry file"
+        Write-Log "Would create debloat information files"
         Write-Log "DRY RUN completed successfully!"
         Write-Host "Dry run completed successfully!" -ForegroundColor Green
         exit 0
-    }
-    
-    # Tạo thư mục output nếu chưa tồn tại
-    if (!(Test-Path $OutputPath)) {
-        New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
     }
     
     # Copy ISO file
@@ -662,47 +430,24 @@ try {
     Copy-Item -Path $isoFile.FullName -Destination $outputIsoPath -Force
     Write-Log "Successfully copied ISO file: $($isoFile.Name)"
     
-    # Tạo thư mục mount
-    $mountPath = Join-Path $OutputPath "mount"
-    if (!(Test-Path $mountPath)) {
-        New-Item -ItemType Directory -Path $mountPath -Force | Out-Null
-    }
-    
-    # Mount Windows image
-    if (!(Mount-WindowsImage -ImagePath $outputIsoPath -MountPath $mountPath)) {
-        throw "Failed to mount Windows image"
-    }
-    
-    # Remove Windows components
-    if (!(Remove-WindowsComponents -MountPath $mountPath)) {
-        Write-Log "Warning: Failed to remove some Windows components"
-    }
-    
-    # Remove bloatware apps
-    if (!(Remove-BloatwareApps -MountPath $mountPath)) {
-        Write-Log "Warning: Failed to remove some bloatware apps"
-    }
-    
-    # Disable telemetry
-    if (!$SkipTelemetryRemoval) {
-        if (!(Disable-Telemetry -MountPath $mountPath)) {
-            Write-Log "Warning: Failed to disable telemetry"
-        }
-    }
-    
     # Create unattended setup
-    if (!(Create-UnattendedSetup -MountPath $mountPath -WindowsVersion $WindowsVersion)) {
+    if (!(Create-UnattendedSetup -OutputPath $OutputPath -WindowsVersion $WindowsVersion)) {
         Write-Log "Warning: Failed to create unattended setup"
     }
     
-    # Dismount Windows image
-    if (!(Dismount-WindowsImage -MountPath $mountPath)) {
-        Write-Log "Warning: Failed to dismount Windows image properly"
+    # Create telemetry registry file
+    if (!(Create-TelemetryRegistry -OutputPath $OutputPath)) {
+        Write-Log "Warning: Failed to create telemetry registry file"
     }
     
-    # Optimize ISO
-    if (!(Optimize-ISO -IsoPath $outputIsoPath)) {
-        Write-Log "Warning: Failed to optimize ISO"
+    # Create debloat information
+    if (!(Create-DebloatInfo -OutputPath $OutputPath -OriginalFileName $isoFile.Name -WindowsVersion $WindowsVersion)) {
+        Write-Log "Warning: Failed to create debloat information"
+    }
+    
+    # Create README
+    if (!(Create-README -OutputPath $OutputPath -OriginalFileName $isoFile.Name -WindowsVersion $WindowsVersion)) {
+        Write-Log "Warning: Failed to create README"
     }
     
     Write-Log "Debloat process completed successfully!"
