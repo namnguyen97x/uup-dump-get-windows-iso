@@ -59,6 +59,35 @@ APPS_TO_REMOVE=(
 
 echo ">>> Bắt đầu quá trình debloat cho $ISO_PATH"
 
+# Kiểm tra và cài đặt các package cần thiết
+echo ">>> Kiểm tra các package cần thiết..."
+
+# Kiểm tra wimlib-tools
+if ! command -v wimlib-imagex &> /dev/null; then
+    echo "Cài đặt wimlib-tools..."
+    sudo apt-get update
+    sudo apt-get install -y wimtools
+else
+    echo "wimlib-tools đã được cài đặt"
+    echo "Version: $(wimlib-imagex --version)"
+fi
+
+# Kiểm tra xorriso
+if ! command -v xorriso &> /dev/null; then
+    echo "Cài đặt xorriso..."
+    sudo apt-get install -y xorriso
+else
+    echo "xorriso đã được cài đặt"
+fi
+
+# Kiểm tra 7zip
+if ! command -v 7z &> /dev/null; then
+    echo "Cài đặt p7zip-full..."
+    sudo apt-get install -y p7zip-full
+else
+    echo "7zip đã được cài đặt"
+fi
+
 # 1. Tạo các thư mục làm việc
 echo ">>> 1. Tạo thư mục làm việc"
 mkdir -p iso_extracted wim_mount
@@ -132,14 +161,27 @@ else
 fi
 
 # 4. Lặp qua từng phiên bản Windows (Image) trong file WIM
-IMAGE_COUNT=$(wimlib-imagex info "$WIM_FILE" | grep -c "Image Index")
+echo ">>> 4. Xử lý WIM file..."
+echo ">>> Kiểm tra WIM file size:"
+ls -lh "$WIM_FILE"
+
+echo ">>> Lấy thông tin WIM file:"
+WIM_INFO=$(wimlib-imagex info "$WIM_FILE")
+echo "$WIM_INFO"
+
+echo ">>> Đếm số lượng images:"
+IMAGE_COUNT=$(echo "$WIM_INFO" | grep -c "Image Index" || echo "0")
 echo ">>> Tìm thấy $IMAGE_COUNT phiên bản Windows trong WIM."
 
-# Kiểm tra thông tin WIM file
-echo ">>> Thông tin WIM file:"
-wimlib-imagex info "$WIM_FILE"
+if [ "$IMAGE_COUNT" -eq 0 ]; then
+    echo "Lỗi: Không tìm thấy images trong WIM file"
+    echo "Thông tin WIM chi tiết:"
+    wimlib-imagex info "$WIM_FILE" | head -20
+    exit 1
+fi
 
 for (( i=1; i<=IMAGE_COUNT; i++ )); do
+    echo ">>> Xử lý Image $i..."
     IMAGE_NAME=$(wimlib-imagex info "$WIM_FILE" $i | grep "Name:" | sed 's/Name: *//')
     echo "--- Đang xử lý Image $i: $IMAGE_NAME ---"
     
@@ -148,8 +190,18 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/*
     chmod 755 wim_mount
     
+    echo ">>> Kiểm tra quyền thư mục mount:"
+    ls -ld wim_mount
+    echo ">>> Kiểm tra dung lượng disk trước khi mount:"
+    df -h .
+    
     echo ">>> Mounting WIM image $i..."
-    if ! wimlib-imagex mountrw "$WIM_FILE" "$i" wim_mount; then
+    MOUNT_OUTPUT=$(wimlib-imagex mountrw "$WIM_FILE" "$i" wim_mount 2>&1)
+    MOUNT_EXIT_CODE=$?
+    echo "Mount output: $MOUNT_OUTPUT"
+    echo "Mount exit code: $MOUNT_EXIT_CODE"
+    
+    if [ $MOUNT_EXIT_CODE -ne 0 ]; then
         echo "Lỗi: Không thể mount WIM image $i"
         echo "Nội dung thư mục wim_mount:"
         ls -la wim_mount
@@ -163,6 +215,8 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     echo ">>> WIM image mounted successfully"
     echo ">>> Nội dung thư mục mount:"
     ls -la wim_mount/
+    echo ">>> Kiểm tra dung lượng disk sau khi mount:"
+    df -h .
     
     echo "    Removing AppX packages..."
     for app in "${APPS_TO_REMOVE[@]}"; do
@@ -179,10 +233,16 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/\$Recycle.Bin || true
     
     echo ">>> Committing changes..."
-    if ! wimlib-imagex unmount --commit wim_mount; then
+    COMMIT_OUTPUT=$(wimlib-imagex unmount --commit wim_mount 2>&1)
+    COMMIT_EXIT_CODE=$?
+    echo "Commit output: $COMMIT_OUTPUT"
+    echo "Commit exit code: $COMMIT_EXIT_CODE"
+    
+    if [ $COMMIT_EXIT_CODE -ne 0 ]; then
         echo "Lỗi: Không thể commit changes cho WIM image $i"
         echo "Thử discard changes..."
-        wimlib-imagex unmount --discard wim_mount || true
+        DISCARD_OUTPUT=$(wimlib-imagex unmount --discard wim_mount 2>&1)
+        echo "Discard output: $DISCARD_OUTPUT"
         exit 1
     fi
     
