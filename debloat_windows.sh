@@ -63,22 +63,26 @@ echo ">>> Bắt đầu quá trình debloat cho $ISO_PATH"
 echo ">>> 1. Tạo thư mục làm việc"
 mkdir -p iso_extracted wim_mount
 
-# 2. Trích xuất ISO bằng xorriso (thay vì 7-Zip)
-echo ">>> 2. Trích xuất nội dung ISO bằng xorriso"
-if ! xorriso -osirrox on -indev "$ISO_PATH" -extract_all iso_extracted/; then
-    echo ">>> xorriso failed, trying 7z with different approach..."
-    # Thử với 7z với flag khác
+# 2. Trích xuất ISO bằng mount method (hiệu quả hơn cho ISO lớn)
+echo ">>> 2. Trích xuất nội dung ISO bằng mount method"
+echo ">>> Mounting ISO file..."
+
+# Tạo thư mục mount
+sudo mkdir -p /mnt/iso
+
+# Mount ISO file
+if sudo mount -o loop "$ISO_PATH" /mnt/iso; then
+    echo ">>> ISO mounted successfully, copying files..."
+    # Copy toàn bộ nội dung từ mount point
+    cp -r /mnt/iso/* iso_extracted/
+    sudo umount /mnt/iso
+    echo ">>> Files copied successfully"
+else
+    echo ">>> Mount failed, trying 7z as fallback..."
+    # Fallback to 7z nếu mount thất bại
     if ! 7z x "$ISO_PATH" -oiso_extracted -y; then
-        echo ">>> 7z also failed, trying mount method..."
-        # Thử mount ISO như drive
-        sudo mkdir -p /mnt/iso
-        if sudo mount -o loop "$ISO_PATH" /mnt/iso; then
-            cp -r /mnt/iso/* iso_extracted/
-            sudo umount /mnt/iso
-        else
-            echo "Lỗi: Tất cả các phương pháp trích xuất ISO đều thất bại"
-            exit 1
-        fi
+        echo "Lỗi: Tất cả các phương pháp trích xuất ISO đều thất bại"
+        exit 1
     fi
 fi
 
