@@ -231,9 +231,19 @@ echo ">>> 5. Xây dựng lại file ISO bootable mới..."
 # Đảm bảo file boot có quyền đọc (nếu cần)
 sudo chmod +r iso_extracted/boot/etfsboot.com
 
-# Tạo ISO, dùng đường dẫn boot/etfsboot.com bên trong iso_extracted
-xorriso -as mkisofs -iso-level 3 -o "$DEBLOATED_ISO_NAME" \
-  -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table iso_extracted
+# Kiểm tra file UEFI boot
+if [ -f iso_extracted/efi/microsoft/boot/efisys.bin ]; then
+  echo ">>> Tạo ISO hybrid (UEFI + BIOS) với UDF..."
+  xorriso -as mkisofs -iso-level 3 -udf -o "$DEBLOATED_ISO_NAME" \
+    -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table \
+    -eltorito-alt-boot -e efi/microsoft/boot/efisys.bin -no-emul-boot \
+    iso_extracted
+else
+  echo ">>> Tạo ISO BIOS-only với UDF..."
+  xorriso -as mkisofs -iso-level 3 -udf -o "$DEBLOATED_ISO_NAME" \
+    -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table \
+    iso_extracted
+fi
 
 # Trước khi tạo lại ISO bootable mới, cấp quyền ghi cho thư mục iso_extracted
 sudo chown -R $(whoami) iso_extracted
