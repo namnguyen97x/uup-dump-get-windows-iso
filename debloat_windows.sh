@@ -63,9 +63,9 @@ echo ">>> Bắt đầu quá trình debloat cho $ISO_PATH"
 echo ">>> 1. Tạo thư mục làm việc"
 mkdir -p iso_extracted wim_mount
 
-# 2. Trích xuất ISO bằng 7-Zip
-echo ">>> 2. Trích xuất nội dung ISO"
-7z x "$ISO_PATH" -oiso_extracted
+# 2. Trích xuất ISO bằng xorriso (thay vì 7-Zip)
+echo ">>> 2. Trích xuất nội dung ISO bằng xorriso"
+xorriso -osirrox on -indev "$ISO_PATH" -extract / iso_extracted/
 
 # 3. Tìm và xử lý install.wim
 WIM_FILE="iso_extracted/sources/install.wim"
