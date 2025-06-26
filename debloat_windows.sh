@@ -214,6 +214,9 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/\$Recycle.Bin || true
     
     echo ">>> Repacking WIM image $i..."
+    # Cấp quyền cho thư mục sources
+    sudo chown -R $(whoami) iso_extracted/sources
+    
     # Backup WIM gốc
     cp "$WIM_FILE" "$WIM_FILE.backup"
     
