@@ -241,13 +241,13 @@ sudo chmod +r iso_extracted/boot/etfsboot.com
 # Kiểm tra file UEFI boot
 if [ -f iso_extracted/efi/microsoft/boot/efisys.bin ]; then
   echo ">>> Tạo ISO hybrid (UEFI + BIOS) với UDF bằng genisoimage..."
-  genisoimage -udf -iso-level 3 -o "$DEBLOATED_ISO_NAME" \
+  genisoimage -udf -iso-level 3 -allow-limited-size -o "$DEBLOATED_ISO_NAME" \
     -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table \
     -eltorito-alt-boot -e efi/microsoft/boot/efisys.bin -no-emul-boot \
     iso_extracted
 else
   echo ">>> Tạo ISO BIOS-only với UDF bằng genisoimage..."
-  genisoimage -udf -iso-level 3 -o "$DEBLOATED_ISO_NAME" \
+  genisoimage -udf -iso-level 3 -allow-limited-size -o "$DEBLOATED_ISO_NAME" \
     -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table \
     iso_extracted
 fi
