@@ -170,7 +170,7 @@ WIM_INFO=$(wimlib-imagex info "$WIM_FILE")
 echo "$WIM_INFO"
 
 echo ">>> Đếm số lượng images:"
-IMAGE_COUNT=$(echo "$WIM_INFO" | grep -c "Image Index" || echo "0")
+IMAGE_COUNT=$(echo "$WIM_INFO" | grep -c "^Index:" || echo "0")
 echo ">>> Tìm thấy $IMAGE_COUNT phiên bản Windows trong WIM."
 
 if [ "$IMAGE_COUNT" -eq 0 ]; then
@@ -264,6 +264,9 @@ xorriso -as mkisofs -r -V "Win_Debloated" \
     -append_partition 2 0xef iso_extracted/efi/microsoft/boot/efisys.bin \
     -partition_cyl_align on \
     iso_extracted/
+
+# Trước khi tạo lại ISO bootable mới, cấp quyền ghi cho thư mục iso_extracted
+sudo chown -R $(whoami) iso_extracted
 
 # 6. Dọn dẹp
 echo ">>> 6. Dọn dẹp thư mục tạm"
