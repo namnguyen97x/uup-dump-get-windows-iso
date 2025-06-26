@@ -214,17 +214,14 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/\$Recycle.Bin || true
     
     echo ">>> Repacking WIM image $i..."
-    # Cấp quyền cho thư mục sources
-    sudo chown -R $(whoami) iso_extracted/sources
-    
-    # Backup WIM gốc
-    cp "$WIM_FILE" "$WIM_FILE.backup"
+    # Backup WIM gốc ra thư mục hiện tại (có quyền ghi)
+    cp "$WIM_FILE" "./install.wim.backup"
     
     # Update WIM với image đã debloat
     if ! wimlib-imagex update "$WIM_FILE" $i wim_mount; then
         echo "Lỗi: Không thể update WIM image $i"
         # Restore backup nếu cần
-        mv "$WIM_FILE.backup" "$WIM_FILE"
+        mv "./install.wim.backup" "$WIM_FILE"
         exit 1
     fi
     
