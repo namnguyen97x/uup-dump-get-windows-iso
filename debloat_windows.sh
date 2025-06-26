@@ -83,35 +83,47 @@ if ! xorriso -osirrox on -indev "$ISO_PATH" -extract_all iso_extracted/; then
 fi
 
 # Kiểm tra xem extraction có thành công không
-if [ ! -d "iso_extracted/sources" ]; then
-    echo "Lỗi: Không thể trích xuất thư mục sources từ ISO"
-    echo "Nội dung thư mục iso_extracted:"
-    ls -la iso_extracted/
+echo ">>> Kiểm tra cấu trúc thư mục sau khi trích xuất:"
+ls -la iso_extracted/
+
+# Tìm thư mục sources trong các vị trí có thể
+SOURCES_DIR=""
+if [ -d "iso_extracted/sources" ]; then
+    SOURCES_DIR="iso_extracted/sources"
+elif [ -d "iso_extracted/CPRA_X64FRE_EN-US_DV9/sources" ]; then
+    SOURCES_DIR="iso_extracted/CPRA_X64FRE_EN-US_DV9/sources"
+elif [ -d "iso_extracted/*/sources" ]; then
+    SOURCES_DIR=$(find iso_extracted -name "sources" -type d | head -1)
+else
+    echo "Lỗi: Không thể tìm thấy thư mục sources"
+    echo "Tìm kiếm thư mục sources trong toàn bộ iso_extracted:"
+    find iso_extracted -name "sources" -type d
     exit 1
 fi
 
-echo ">>> Kiểm tra nội dung thư mục sources:"
-ls -la iso_extracted/sources/
+echo ">>> Tìm thấy thư mục sources tại: $SOURCES_DIR"
+echo ">>> Nội dung thư mục sources:"
+ls -la "$SOURCES_DIR"
 
 # 3. Tìm và xử lý install.wim hoặc install.esd
 WIM_FILE=""
 ESD_FILE=""
 
-if [ -f "iso_extracted/sources/install.wim" ]; then
-    WIM_FILE="iso_extracted/sources/install.wim"
+if [ -f "$SOURCES_DIR/install.wim" ]; then
+    WIM_FILE="$SOURCES_DIR/install.wim"
     echo ">>> Tìm thấy install.wim"
-elif [ -f "iso_extracted/sources/install.esd" ]; then
-    ESD_FILE="iso_extracted/sources/install.esd"
+elif [ -f "$SOURCES_DIR/install.esd" ]; then
+    ESD_FILE="$SOURCES_DIR/install.esd"
     echo ">>> Tìm thấy install.esd, chuyển đổi sang install.wim"
     
     # Chuyển đổi ESD sang WIM
-    wimlib-imagex export "$ESD_FILE" 1 iso_extracted/sources/install.wim
-    WIM_FILE="iso_extracted/sources/install.wim"
+    wimlib-imagex export "$ESD_FILE" 1 "$SOURCES_DIR/install.wim"
+    WIM_FILE="$SOURCES_DIR/install.wim"
     echo ">>> Chuyển đổi ESD sang WIM thành công"
 else
-    echo "Lỗi: Không tìm thấy install.wim hoặc install.esd trong sources/"
+    echo "Lỗi: Không tìm thấy install.wim hoặc install.esd trong $SOURCES_DIR"
     echo "Nội dung thư mục sources:"
-    ls -la iso_extracted/sources/
+    ls -la "$SOURCES_DIR"
     exit 1
 fi
 
