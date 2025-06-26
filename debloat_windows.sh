@@ -214,8 +214,8 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/\$Recycle.Bin || true
     
     echo ">>> Repacking WIM image $i..."
-    # Tạo file WIM mới ở thư mục hiện tại (không ghi đè vào sources)
-    if ! wimlib-imagex create "./install.debloated.wim" wim_mount --name="$IMAGE_NAME"; then
+    # Tạo file WIM mới ở thư mục hiện tại bằng lệnh capture
+    if ! wimlib-imagex capture wim_mount "./install.debloated.wim" "$IMAGE_NAME"; then
         echo "Lỗi: Không thể tạo file WIM mới cho image $i"
         exit 1
     fi
