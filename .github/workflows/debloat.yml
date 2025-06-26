@@ -107,9 +107,18 @@ jobs:
           # Tạo thư mục download
           mkdir -p ./downloaded_artifact
           
-          # Tải artifact bằng GitHub CLI
-          gh auth login --with-token <<< "$TOKEN"
-          gh api repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip --output ./downloaded_artifact/artifact.zip
+          # Tải artifact bằng curl trực tiếp
+          curl -L -H "Authorization: token $TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip" \
+            --output ./downloaded_artifact/artifact.zip
+          
+          # Kiểm tra xem download có thành công không
+          if [ ! -f "./downloaded_artifact/artifact.zip" ] || [ ! -s "./downloaded_artifact/artifact.zip" ]; then
+            echo "::error::Failed to download artifact or file is empty"
+            exit 1
+          fi
+          
+          echo "Artifact downloaded successfully, size: $(ls -lh ./downloaded_artifact/artifact.zip | awk '{print $5}')"
           
           # Giải nén artifact
           cd ./downloaded_artifact
@@ -117,7 +126,7 @@ jobs:
           rm artifact.zip
           cd ..
           
-          echo "Artifact downloaded and extracted successfully"
+          echo "Artifact extracted successfully"
 
       - name: Tìm file ISO trong artifact đã tải
         if: steps.detect_source.outputs.source_type == 'workflow'
