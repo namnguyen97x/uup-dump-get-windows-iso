@@ -228,12 +228,12 @@ echo ">>> Đã tạo file ./install.debloated.wim. Khi build lại ISO, hãy dù
 # 5. Xây dựng lại file ISO bootable
 echo ">>> 5. Xây dựng lại file ISO bootable mới..."
 
-# Copy file boot ra thư mục hiện tại để tránh lỗi permission denied
-cp iso_extracted/boot/etfsboot.com ./etfsboot.com
+# Đảm bảo file boot có quyền đọc (nếu cần)
+sudo chmod +r iso_extracted/boot/etfsboot.com
 
-# Tạo ISO với tham số hỗ trợ file lớn (bỏ -allow-limited-size)
+# Tạo ISO, dùng đường dẫn boot/etfsboot.com bên trong iso_extracted
 xorriso -as mkisofs -iso-level 3 -o "$DEBLOATED_ISO_NAME" \
-  -b ./etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table iso_extracted
+  -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table iso_extracted
 
 # Trước khi tạo lại ISO bootable mới, cấp quyền ghi cho thư mục iso_extracted
 sudo chown -R $(whoami) iso_extracted
