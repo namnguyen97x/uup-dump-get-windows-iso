@@ -231,21 +231,9 @@ echo ">>> 5. Xây dựng lại file ISO bootable mới..."
 # Copy file boot ra thư mục hiện tại để tránh lỗi permission denied
 cp iso_extracted/boot/etfsboot.com ./etfsboot.com
 
-# Thay thế mọi chỗ dùng iso_extracted/boot/etfsboot.com thành ./etfsboot.com
-# Ví dụ:
-dd if=./etfsboot.com of=... # phần còn lại giữ nguyên như cũ
-
-# Dùng biến DEBLOATED_ISO_NAME đã được xác định ở trên
-xorriso -as mkisofs -r -V "Win_Debloated" \
-    -o "$DEBLOATED_ISO_NAME" \
-    -b boot/etfsboot.com -no-emul-boot \
-    -boot-load-size 8 \
-    -c boot/boot.cat \
-    -iso-level 4 -J -l \
-    -eltorito-alt-boot -b efi/microsoft/boot/efisys.bin -no-emul-boot \
-    -append_partition 2 0xef iso_extracted/efi/microsoft/boot/efisys.bin \
-    -partition_cyl_align on \
-    iso_extracted/
+# Tạo ISO với các tham số hỗ trợ file lớn
+xorriso -as mkisofs -iso-level 3 -allow-limited-size -o "$DEBLOATED_ISO_NAME" \
+  -b ./etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table iso_extracted
 
 # Trước khi tạo lại ISO bootable mới, cấp quyền ghi cho thư mục iso_extracted
 sudo chown -R $(whoami) iso_extracted
