@@ -227,7 +227,13 @@ echo ">>> Đã tạo file ./install.debloated.wim. Khi build lại ISO, hãy dù
 
 # 5. Xây dựng lại file ISO bootable
 echo ">>> 5. Xây dựng lại file ISO bootable mới..."
-dd if="$ISO_PATH" bs=1 count=432 of=iso_extracted/boot/etfsboot.com
+
+# Copy file boot ra thư mục hiện tại để tránh lỗi permission denied
+cp iso_extracted/boot/etfsboot.com ./etfsboot.com
+
+# Thay thế mọi chỗ dùng iso_extracted/boot/etfsboot.com thành ./etfsboot.com
+# Ví dụ:
+dd if=./etfsboot.com of=... # phần còn lại giữ nguyên như cũ
 
 # Dùng biến DEBLOATED_ISO_NAME đã được xác định ở trên
 xorriso -as mkisofs -r -V "Win_Debloated" \
