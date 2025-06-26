@@ -214,11 +214,16 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/\$Recycle.Bin || true
     
     echo ">>> Repacking WIM image $i..."
-    if ! wimlib-imagex create "$WIM_FILE.new" wim_mount; then
-        echo "Lỗi: Không thể tạo lại WIM image $i"
+    # Backup WIM gốc
+    cp "$WIM_FILE" "$WIM_FILE.backup"
+    
+    # Update WIM với image đã debloat
+    if ! wimlib-imagex update "$WIM_FILE" $i wim_mount; then
+        echo "Lỗi: Không thể update WIM image $i"
+        # Restore backup nếu cần
+        mv "$WIM_FILE.backup" "$WIM_FILE"
         exit 1
     fi
-    mv "$WIM_FILE.new" "$WIM_FILE"
     
     echo "--- Hoàn tất xử lý Image $i ---"
 done
