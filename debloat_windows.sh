@@ -135,17 +135,57 @@ fi
 IMAGE_COUNT=$(wimlib-imagex info "$WIM_FILE" | grep -c "Image Index")
 echo ">>> Tìm thấy $IMAGE_COUNT phiên bản Windows trong WIM."
 
+# Kiểm tra thông tin WIM file
+echo ">>> Thông tin WIM file:"
+wimlib-imagex info "$WIM_FILE"
+
 for (( i=1; i<=IMAGE_COUNT; i++ )); do
     IMAGE_NAME=$(wimlib-imagex info "$WIM_FILE" $i | grep "Name:" | sed 's/Name: *//')
     echo "--- Đang xử lý Image $i: $IMAGE_NAME ---"
-    wimlib-imagex mountrw "$WIM_FILE" "$i" wim_mount
+    
+    # Đảm bảo thư mục mount rỗng và có quyền ghi
+    echo ">>> Dọn dẹp thư mục mount..."
+    rm -rf wim_mount/*
+    chmod 755 wim_mount
+    
+    echo ">>> Mounting WIM image $i..."
+    if ! wimlib-imagex mountrw "$WIM_FILE" "$i" wim_mount; then
+        echo "Lỗi: Không thể mount WIM image $i"
+        echo "Nội dung thư mục wim_mount:"
+        ls -la wim_mount
+        echo "Kiểm tra quyền thư mục:"
+        ls -ld wim_mount
+        echo "Kiểm tra dung lượng disk:"
+        df -h .
+        exit 1
+    fi
+    
+    echo ">>> WIM image mounted successfully"
+    echo ">>> Nội dung thư mục mount:"
+    ls -la wim_mount/
+    
     echo "    Removing AppX packages..."
     for app in "${APPS_TO_REMOVE[@]}"; do
-        find wim_mount/Program\ Files/WindowsApps -maxdepth 1 -type d -name "*${app}*" -exec echo "      Removing {}" \; -exec rm -rf {} \; || true
-        find wim_mount/Windows/SystemApps -maxdepth 1 -type d -name "*${app}*" -exec echo "      Removing {}" \; -exec rm -rf {} \; || true
+        echo "      Checking for app: $app"
+        if [ -d "wim_mount/Program Files/WindowsApps" ]; then
+            find wim_mount/Program\ Files/WindowsApps -maxdepth 1 -type d -name "*${app}*" -exec echo "        Removing {}" \; -exec rm -rf {} \; || true
+        fi
+        if [ -d "wim_mount/Windows/SystemApps" ]; then
+            find wim_mount/Windows/SystemApps -maxdepth 1 -type d -name "*${app}*" -exec echo "        Removing {}" \; -exec rm -rf {} \; || true
+        fi
     done
-    rm -rf wim_mount/\$Recycle.Bin
-    wimlib-imagex unmount --commit wim_mount
+    
+    echo ">>> Removing Recycle.Bin..."
+    rm -rf wim_mount/\$Recycle.Bin || true
+    
+    echo ">>> Committing changes..."
+    if ! wimlib-imagex unmount --commit wim_mount; then
+        echo "Lỗi: Không thể commit changes cho WIM image $i"
+        echo "Thử discard changes..."
+        wimlib-imagex unmount --discard wim_mount || true
+        exit 1
+    fi
+    
     echo "--- Hoàn tất xử lý Image $i ---"
 done
 
