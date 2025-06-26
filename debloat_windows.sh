@@ -185,38 +185,19 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     IMAGE_NAME=$(wimlib-imagex info "$WIM_FILE" $i | grep "Name:" | sed 's/Name: *//')
     echo "--- Đang xử lý Image $i: $IMAGE_NAME ---"
     
-    # Đảm bảo thư mục mount rỗng và có quyền ghi
+    # Đảm bảo thư mục mount rỗng
     echo ">>> Dọn dẹp thư mục mount..."
     rm -rf wim_mount/*
-    chmod 755 wim_mount
+    mkdir -p wim_mount
     
-    echo ">>> Kiểm tra quyền thư mục mount:"
-    ls -ld wim_mount
-    echo ">>> Kiểm tra dung lượng disk trước khi mount:"
-    df -h .
-    
-    echo ">>> Mounting WIM image $i..."
-    MOUNT_OUTPUT=$(wimlib-imagex mountrw "$WIM_FILE" "$i" wim_mount 2>&1)
-    MOUNT_EXIT_CODE=$?
-    echo "Mount output: $MOUNT_OUTPUT"
-    echo "Mount exit code: $MOUNT_EXIT_CODE"
-    
-    if [ $MOUNT_EXIT_CODE -ne 0 ]; then
-        echo "Lỗi: Không thể mount WIM image $i"
-        echo "Nội dung thư mục wim_mount:"
-        ls -la wim_mount
-        echo "Kiểm tra quyền thư mục:"
-        ls -ld wim_mount
-        echo "Kiểm tra dung lượng disk:"
-        df -h .
+    echo ">>> Extracting WIM image $i..."
+    if ! wimlib-imagex extract "$WIM_FILE" $i --dest-dir=wim_mount; then
+        echo "Lỗi: Không thể extract WIM image $i"
         exit 1
     fi
     
-    echo ">>> WIM image mounted successfully"
     echo ">>> Nội dung thư mục mount:"
     ls -la wim_mount/
-    echo ">>> Kiểm tra dung lượng disk sau khi mount:"
-    df -h .
     
     echo "    Removing AppX packages..."
     for app in "${APPS_TO_REMOVE[@]}"; do
@@ -232,19 +213,12 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     echo ">>> Removing Recycle.Bin..."
     rm -rf wim_mount/\$Recycle.Bin || true
     
-    echo ">>> Committing changes..."
-    COMMIT_OUTPUT=$(wimlib-imagex unmount --commit wim_mount 2>&1)
-    COMMIT_EXIT_CODE=$?
-    echo "Commit output: $COMMIT_OUTPUT"
-    echo "Commit exit code: $COMMIT_EXIT_CODE"
-    
-    if [ $COMMIT_EXIT_CODE -ne 0 ]; then
-        echo "Lỗi: Không thể commit changes cho WIM image $i"
-        echo "Thử discard changes..."
-        DISCARD_OUTPUT=$(wimlib-imagex unmount --discard wim_mount 2>&1)
-        echo "Discard output: $DISCARD_OUTPUT"
+    echo ">>> Repacking WIM image $i..."
+    if ! wimlib-imagex create "$WIM_FILE.new" wim_mount; then
+        echo "Lỗi: Không thể tạo lại WIM image $i"
         exit 1
     fi
+    mv "$WIM_FILE.new" "$WIM_FILE"
     
     echo "--- Hoàn tất xử lý Image $i ---"
 done
