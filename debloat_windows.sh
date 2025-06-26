@@ -65,11 +65,28 @@ mkdir -p iso_extracted wim_mount
 
 # 2. Trích xuất ISO bằng xorriso (thay vì 7-Zip)
 echo ">>> 2. Trích xuất nội dung ISO bằng xorriso"
-xorriso -osirrox on -indev "$ISO_PATH" -extract / iso_extracted/
+if ! xorriso -osirrox on -indev "$ISO_PATH" -extract_all iso_extracted/; then
+    echo ">>> xorriso failed, trying 7z with different approach..."
+    # Thử với 7z với flag khác
+    if ! 7z x "$ISO_PATH" -oiso_extracted -y; then
+        echo ">>> 7z also failed, trying mount method..."
+        # Thử mount ISO như drive
+        sudo mkdir -p /mnt/iso
+        if sudo mount -o loop "$ISO_PATH" /mnt/iso; then
+            cp -r /mnt/iso/* iso_extracted/
+            sudo umount /mnt/iso
+        else
+            echo "Lỗi: Tất cả các phương pháp trích xuất ISO đều thất bại"
+            exit 1
+        fi
+    fi
+fi
 
 # Kiểm tra xem extraction có thành công không
 if [ ! -d "iso_extracted/sources" ]; then
     echo "Lỗi: Không thể trích xuất thư mục sources từ ISO"
+    echo "Nội dung thư mục iso_extracted:"
+    ls -la iso_extracted/
     exit 1
 fi
 
