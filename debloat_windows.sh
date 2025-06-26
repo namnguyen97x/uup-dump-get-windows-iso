@@ -231,8 +231,8 @@ echo ">>> 5. Xây dựng lại file ISO bootable mới..."
 # Copy file boot ra thư mục hiện tại để tránh lỗi permission denied
 cp iso_extracted/boot/etfsboot.com ./etfsboot.com
 
-# Tạo ISO với các tham số hỗ trợ file lớn
-xorriso -as mkisofs -iso-level 3 -allow-limited-size -o "$DEBLOATED_ISO_NAME" \
+# Tạo ISO với tham số hỗ trợ file lớn (bỏ -allow-limited-size)
+xorriso -as mkisofs -iso-level 3 -o "$DEBLOATED_ISO_NAME" \
   -b ./etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table iso_extracted
 
 # Trước khi tạo lại ISO bootable mới, cấp quyền ghi cho thư mục iso_extracted
