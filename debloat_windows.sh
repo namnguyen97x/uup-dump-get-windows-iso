@@ -67,10 +67,34 @@ mkdir -p iso_extracted wim_mount
 echo ">>> 2. Trích xuất nội dung ISO bằng xorriso"
 xorriso -osirrox on -indev "$ISO_PATH" -extract / iso_extracted/
 
-# 3. Tìm và xử lý install.wim
-WIM_FILE="iso_extracted/sources/install.wim"
-if [ ! -f "$WIM_FILE" ]; then
-    echo "Lỗi: Không tìm thấy install.wim trong sources/. Có thể là install.esd?"
+# Kiểm tra xem extraction có thành công không
+if [ ! -d "iso_extracted/sources" ]; then
+    echo "Lỗi: Không thể trích xuất thư mục sources từ ISO"
+    exit 1
+fi
+
+echo ">>> Kiểm tra nội dung thư mục sources:"
+ls -la iso_extracted/sources/
+
+# 3. Tìm và xử lý install.wim hoặc install.esd
+WIM_FILE=""
+ESD_FILE=""
+
+if [ -f "iso_extracted/sources/install.wim" ]; then
+    WIM_FILE="iso_extracted/sources/install.wim"
+    echo ">>> Tìm thấy install.wim"
+elif [ -f "iso_extracted/sources/install.esd" ]; then
+    ESD_FILE="iso_extracted/sources/install.esd"
+    echo ">>> Tìm thấy install.esd, chuyển đổi sang install.wim"
+    
+    # Chuyển đổi ESD sang WIM
+    wimlib-imagex export "$ESD_FILE" 1 iso_extracted/sources/install.wim
+    WIM_FILE="iso_extracted/sources/install.wim"
+    echo ">>> Chuyển đổi ESD sang WIM thành công"
+else
+    echo "Lỗi: Không tìm thấy install.wim hoặc install.esd trong sources/"
+    echo "Nội dung thư mục sources:"
+    ls -la iso_extracted/sources/
     exit 1
 fi
 
