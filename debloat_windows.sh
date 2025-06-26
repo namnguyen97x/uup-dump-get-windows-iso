@@ -214,19 +214,16 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/\$Recycle.Bin || true
     
     echo ">>> Repacking WIM image $i..."
-    # Backup WIM gốc ra thư mục hiện tại (có quyền ghi)
-    cp "$WIM_FILE" "./install.wim.backup"
-    
-    # Update WIM với image đã debloat
-    if ! wimlib-imagex update "$WIM_FILE" $i wim_mount; then
-        echo "Lỗi: Không thể update WIM image $i"
-        # Restore backup nếu cần
-        mv "./install.wim.backup" "$WIM_FILE"
+    # Tạo file WIM mới ở thư mục hiện tại (không ghi đè vào sources)
+    if ! wimlib-imagex create "./install.debloated.wim" wim_mount --name="$IMAGE_NAME"; then
+        echo "Lỗi: Không thể tạo file WIM mới cho image $i"
         exit 1
     fi
     
     echo "--- Hoàn tất xử lý Image $i ---"
 done
+
+echo ">>> Đã tạo file ./install.debloated.wim. Khi build lại ISO, hãy dùng file này thay cho file install.wim gốc trong sources."
 
 # 5. Xây dựng lại file ISO bootable
 echo ">>> 5. Xây dựng lại file ISO bootable mới..."
