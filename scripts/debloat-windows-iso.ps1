@@ -9,19 +9,21 @@ param(
 )
 
 Write-Host "=== BẮT ĐẦU MOUNT ISO ==="
-# 1. Mount ISO and copy contents
-if (-not $isoPath) {
-    Add-Type -AssemblyName System.Windows.Forms
-    $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Filter = "ISO files (*.iso)|*.iso"
-    $dialog.Title = "Select Windows ISO File"
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $isoPath = $dialog.FileName
-    } else {
-        Write-Host "No ISO selected. Exiting." -ForegroundColor Red
-        exit
-    }
+if (!(Test-Path $isoPath)) {
+    Write-Host "LỖI: Không tìm thấy file ISO $isoPath" -ForegroundColor Red
+    exit 1
 }
+$size = (Get-Item $isoPath).Length / 1GB
+Write-Host "File ISO: $isoPath, Dung lượng: $([math]::Round($size,2)) GB"
+try {
+    Mount-DiskImage -ImagePath $isoPath -ErrorAction Stop
+    Write-Host "=== ĐÃ MOUNT ISO, BẮT ĐẦU COPY ==="
+} catch {
+    Write-Host "LỖI: Không mount được ISO! $_" -ForegroundColor Red
+    exit 1
+}
+
+# 1. Mount ISO and copy contents
 $dest = "$env:SystemDrive\WIDTemp\winlite"
 if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
 New-Item -ItemType Directory -Path $dest | Out-Null
@@ -29,7 +31,6 @@ $mount = Mount-DiskImage -ImagePath $isoPath -PassThru
 $drive = ($mount | Get-Volume).DriveLetter + ":\"
 robocopy $drive $dest /E /COPY:DAT /R:3 /W:5 /MT:8
 Dismount-DiskImage -ImagePath $isoPath
-Write-Host "=== ĐÃ MOUNT ISO, BẮT ĐẦU COPY ==="
 
 # 2. Mount install.wim
 $wim = Join-Path $dest "sources\install.wim"
