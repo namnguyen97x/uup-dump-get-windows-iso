@@ -29,16 +29,24 @@ jobs:
                   $runId = $matches[2]
                   Write-Host "Detected workflow run: $repo, $runId"
                   $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$runId/artifacts"
-                  $headers = @{ Authorization = "token $token" }
+                  $headers = @{ Authorization = "Bearer $token"; "X-GitHub-Api-Version" = "2022-11-28" }
                   $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
-                  if ($artifacts.artifacts.Count -eq 0) { Write-Error "No artifacts found"; exit 1 }
-                  $artifactId = $artifacts.artifacts[0].id
-                  $artifactZipUrl = "https://api.github.com/repos/$repo/actions/artifacts/$artifactId/zip"
-                  Invoke-RestMethod -Uri $artifactZipUrl -Headers $headers -OutFile "artifact.zip"
-                  Expand-Archive -Path "artifact.zip" -DestinationPath "artifact_unzipped"
-                  $iso = Get-ChildItem -Path "artifact_unzipped" -Recurse -Filter *.iso | Select-Object -First 1
-                  if (-not $iso) { Write-Error "No ISO found in artifact"; exit 1 }
-                  Copy-Item $iso.FullName windows.iso
+                  $artifact = $artifacts.artifacts | Where-Object { $_.name -match "iso" } | Select-Object -First 1
+                  if (-not $artifact) { Write-Error "No ISO artifact found"; exit 1 }
+                  $downloadUrl = $artifact.archive_download_url
+                  Write-Host "Downloading artifact: $($artifact.name)"
+                  Invoke-WebRequest -Uri $downloadUrl -Headers $headers -OutFile artifact.zip
+                  Expand-Archive artifact.zip -DestinationPath artifact
+                  Write-Host "=== Danh sách file trong artifact sau khi giải nén ==="
+                  Get-ChildItem artifact -Recurse | ForEach-Object { Write-Host $_.FullName }
+                  $iso = Get-ChildItem artifact -Recurse -Filter *.iso | Select-Object -First 1
+                  if (-not $iso) {
+                      Write-Host "LỖI: Không tìm thấy file ISO trong artifact!" -ForegroundColor Red
+                      exit 1
+                  }
+                  Write-Host "Đã tìm thấy file ISO: $($iso.FullName)"
+                  Copy-Item $iso.FullName windows.iso -Force
+                  Write-Host "Đã copy file ISO về: windows.iso"
                   echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
               } else {
                   Write-Error "Invalid workflow URL format"
@@ -46,6 +54,7 @@ jobs:
               }
           } else {
               Invoke-WebRequest -Uri $source -OutFile "windows.iso"
+              Write-Host "Đã tải file ISO từ direct link về: windows.iso"
               echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
 
