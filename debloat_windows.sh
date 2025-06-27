@@ -258,6 +258,42 @@ done
 echo ">>> Đã tạo file ./install.debloated.wim. Khi build lại ISO, hãy dùng file này thay cho file install.wim gốc trong sources."
 log_resource_usage
 
+# Sau khi debloat xong, patch registry trong WIM để bypass hardware check
+if [ -f "$SOURCES_DIR/install.wim" ]; then
+  echo ">>> Mounting WIM để patch registry bypass hardware check..."
+  sudo wimlib-imagex mount "$SOURCES_DIR/install.wim" 1 wim_mount
+
+  # Tạo file bypass.reg
+  cat > wim_mount/bypass.reg <<EOF
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\\SYSTEM\\Setup\\LabConfig]
+"BypassTPMCheck"=dword:00000001
+"BypassSecureBootCheck"=dword:00000001
+"BypassRAMCheck"=dword:00000001
+"BypassCPUCheck"=dword:00000001
+"BypassStorageCheck"=dword:00000001
+"BypassDiskCheck"=dword:00000001
+EOF
+
+  # Cài đặt reged nếu chưa có
+  if ! command -v reged &> /dev/null; then
+    echo ">>> Cài đặt reged..."
+    sudo apt-get update && sudo apt-get install -y chntpw
+  fi
+
+  # Patch registry SYSTEM hive
+  echo ">>> Patch registry SYSTEM hive trong WIM..."
+  sudo reged -I wim_mount/Windows/System32/config/SYSTEM wim_mount/bypass.reg
+
+  # Xóa file reg
+  rm -f wim_mount/bypass.reg
+
+  # Unmount và commit lại WIM
+  sudo wimlib-imagex unmount wim_mount --commit
+  echo ">>> Đã patch registry thành công!"
+fi
+
 # 5. Xây dựng lại file ISO bootable
 echo ">>> 5. Xây dựng lại file ISO bootable mới..."
 log_resource_usage
