@@ -15,17 +15,38 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download ISO (auto-detect)
+      - name: Download ISO or Artifact (auto-detect)
         id: download_iso
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $source = "${{ github.event.inputs.source }}"
-          if ($source -match "github.com/.*/actions/runs/\d+") {
-            Write-Host "Tải artifact từ workflow chưa được tự động hóa cho Windows runner. Hãy tải ISO về trước hoặc dùng direct link."
-            exit 1
+          $token = "$env:GITHUB_TOKEN"
+          if ($source -match "github.com/.*/actions/runs/(\d+)") {
+              if ($source -match "github.com/([^/]+/[^/]+)/actions/runs/(\d+)") {
+                  $repo = $matches[1]
+                  $runId = $matches[2]
+                  Write-Host "Detected workflow run: $repo, $runId"
+                  $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$runId/artifacts"
+                  $headers = @{ Authorization = "token $token" }
+                  $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
+                  if ($artifacts.artifacts.Count -eq 0) { Write-Error "No artifacts found"; exit 1 }
+                  $artifactId = $artifacts.artifacts[0].id
+                  $artifactZipUrl = "https://api.github.com/repos/$repo/actions/artifacts/$artifactId/zip"
+                  Invoke-RestMethod -Uri $artifactZipUrl -Headers $headers -OutFile "artifact.zip"
+                  Expand-Archive -Path "artifact.zip" -DestinationPath "artifact_unzipped"
+                  $iso = Get-ChildItem -Path "artifact_unzipped" -Recurse -Filter *.iso | Select-Object -First 1
+                  if (-not $iso) { Write-Error "No ISO found in artifact"; exit 1 }
+                  Copy-Item $iso.FullName windows.iso
+                  echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
+              } else {
+                  Write-Error "Invalid workflow URL format"
+                  exit 1
+              }
           } else {
-            Invoke-WebRequest -Uri $source -OutFile "windows.iso"
-            echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
+              Invoke-WebRequest -Uri $source -OutFile "windows.iso"
+              echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
 
       - name: Debloat ISO (PowerShell)
