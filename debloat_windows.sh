@@ -88,12 +88,28 @@ else
     echo "7zip đã được cài đặt"
 fi
 
+# --- LOGGING & RESOURCE CHECK FUNCTIONS ---
+log_resource_usage() {
+  echo "--- Disk usage ---"
+  df -h
+  echo "--- RAM usage ---"
+  free -h || true
+  echo "--- Largest files/folders in workspace ---"
+  du -sh * 2>/dev/null | sort -hr | head -20
+}
+
+# --- Start script ---
+echo ">>> Bắt đầu debloat: $ISO_PATH"
+log_resource_usage
+
 # 1. Tạo các thư mục làm việc
 echo ">>> 1. Tạo thư mục làm việc"
+log_resource_usage
 mkdir -p iso_extracted wim_mount
 
 # 2. Trích xuất ISO bằng mount method (hiệu quả hơn cho ISO lớn)
 echo ">>> 2. Trích xuất nội dung ISO bằng mount method"
+log_resource_usage
 echo ">>> Mounting ISO file..."
 
 # Tạo thư mục mount
@@ -118,6 +134,7 @@ fi
 # Kiểm tra xem extraction có thành công không
 echo ">>> Kiểm tra cấu trúc thư mục sau khi trích xuất:"
 ls -la iso_extracted/
+log_resource_usage
 
 # Tìm thư mục sources trong các vị trí có thể
 SOURCES_DIR=""
@@ -139,6 +156,8 @@ echo ">>> Nội dung thư mục sources:"
 ls -la "$SOURCES_DIR"
 
 # 3. Tìm và xử lý install.wim hoặc install.esd
+echo ">>> 3. Tìm và xử lý install.wim hoặc install.esd"
+log_resource_usage
 WIM_FILE=""
 ESD_FILE=""
 
@@ -162,6 +181,7 @@ fi
 
 # 4. Lặp qua từng phiên bản Windows (Image) trong file WIM
 echo ">>> 4. Xử lý WIM file..."
+log_resource_usage
 echo ">>> Kiểm tra WIM file size:"
 ls -lh "$WIM_FILE"
 
@@ -182,6 +202,7 @@ fi
 
 for (( i=1; i<=IMAGE_COUNT; i++ )); do
     echo ">>> Xử lý Image $i..."
+    log_resource_usage
     IMAGE_NAME=$(wimlib-imagex info "$WIM_FILE" $i | grep "Name:" | sed 's/Name: *//')
     echo "--- Đang xử lý Image $i: $IMAGE_NAME ---"
     
@@ -191,6 +212,7 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     mkdir -p wim_mount
     
     echo ">>> Extracting WIM image $i..."
+    log_resource_usage
     if ! wimlib-imagex extract "$WIM_FILE" $i --dest-dir=wim_mount; then
         echo "Lỗi: Không thể extract WIM image $i"
         exit 1
@@ -198,6 +220,7 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     
     echo ">>> Nội dung thư mục mount:"
     ls -la wim_mount/
+    log_resource_usage
     
     echo "    Removing AppX packages..."
     for app in "${APPS_TO_REMOVE[@]}"; do
@@ -214,6 +237,7 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     rm -rf wim_mount/\$Recycle.Bin || true
     
     echo ">>> Repacking WIM image $i..."
+    log_resource_usage
     # Tạo file WIM mới ở thư mục hiện tại bằng lệnh capture
     if ! wimlib-imagex capture wim_mount "./install.debloated.wim" "$IMAGE_NAME"; then
         echo "Lỗi: Không thể tạo file WIM mới cho image $i"
@@ -221,12 +245,15 @@ for (( i=1; i<=IMAGE_COUNT; i++ )); do
     fi
     
     echo "--- Hoàn tất xử lý Image $i ---"
+    log_resource_usage
 done
 
 echo ">>> Đã tạo file ./install.debloated.wim. Khi build lại ISO, hãy dùng file này thay cho file install.wim gốc trong sources."
+log_resource_usage
 
 # 5. Xây dựng lại file ISO bootable
 echo ">>> 5. Xây dựng lại file ISO bootable mới..."
+log_resource_usage
 
 # Cài đặt genisoimage nếu chưa có
 if ! command -v genisoimage &> /dev/null; then
@@ -264,6 +291,8 @@ fi
 
 # 6. Dọn dẹp
 echo ">>> 6. Dọn dẹp thư mục tạm"
+log_resource_usage
 rm -rf iso_extracted wim_mount
 
+log_resource_usage
 echo ">>> HOÀN TẤT! File ISO đã debloat được tạo tại: $DEBLOATED_ISO_NAME" 
