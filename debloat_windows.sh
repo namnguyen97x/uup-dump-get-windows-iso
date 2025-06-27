@@ -200,7 +200,14 @@ if [ "$IMAGE_COUNT" -eq 0 ]; then
     exit 1
 fi
 
-for (( i=1; i<=IMAGE_COUNT; i++ )); do
+# Sau khi giải nén ISO thành công:
+echo ">>> Đã giải nén ISO, xóa file ISO gốc để tiết kiệm dung lượng..."
+rm -f "$ISO_PATH"
+
+# Giới hạn số lượng image xử lý
+MAX_IMAGES=1
+
+for (( i=1; i<=IMAGE_COUNT && i<=MAX_IMAGES; i++ )); do
     echo ">>> Xử lý Image $i..."
     log_resource_usage
     IMAGE_NAME=$(wimlib-imagex info "$WIM_FILE" $i | grep "Name:" | sed 's/Name: *//')
