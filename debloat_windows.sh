@@ -239,8 +239,14 @@ fi
 echo ">>> Cấp quyền cho thư mục iso_extracted..."
 sudo chown -R $(whoami) iso_extracted
 
-# Đảm bảo file boot có quyền đọc (nếu cần)
-sudo chmod +r iso_extracted/boot/etfsboot.com
+# Đảm bảo tất cả files có quyền đọc/ghi
+echo ">>> Cấp quyền đọc/ghi cho tất cả files..."
+chmod -R 755 iso_extracted
+
+# Đảm bảo file boot có quyền đọc/ghi đặc biệt
+echo ">>> Cấp quyền đặc biệt cho file boot..."
+chmod 644 iso_extracted/boot/etfsboot.com
+chmod 644 iso_extracted/boot/bootfix.bin 2>/dev/null || true
 
 # Kiểm tra file UEFI boot
 if [ -f iso_extracted/efi/microsoft/boot/efisys.bin ]; then
