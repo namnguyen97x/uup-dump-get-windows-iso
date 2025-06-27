@@ -7,200 +7,51 @@ on:
         description: 'Workflow URL hoặc link tải trực tiếp ISO (tự động nhận diện)'
         required: true
         type: string
-        default: 'https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572'
 
 jobs:
   debloat:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Dọn dẹp dung lượng runner (quan trọng!)
+      - name: Download ISO (auto-detect)
+        id: download_iso
+        shell: pwsh
         run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          df -h
-
-      - name: Cài đặt các công cụ cần thiết
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            wimtools p7zip-full xorriso jq
-
-      # --- TỰ ĐỘNG XÁC ĐỊNH LOẠI NGUỒN ---
-      - name: Xác định loại nguồn và thông tin
-        id: detect_source
-        run: |
-          SOURCE="${{ github.event.inputs.source }}"
-          
-          # Kiểm tra xem có phải là GitHub workflow URL không
-          if [[ "$SOURCE" =~ github\.com.*/actions/runs/[0-9]+ ]]; then
-            echo "source_type=workflow" >> $GITHUB_OUTPUT
-            
-            # Trích xuất thông tin từ URL
-            if [[ "$SOURCE" =~ github\.com/([^/]+/[^/]+)/actions/runs/([0-9]+) ]]; then
-              REPO="${BASH_REMATCH[1]}"
-              RUN_ID="${BASH_REMATCH[2]}"
-              echo "repo=$REPO" >> $GITHUB_OUTPUT
-              echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-              echo "Detected workflow URL: $REPO, Run ID: $RUN_ID"
-            else
-              echo "::error::Invalid GitHub workflow URL format"
-              exit 1
-            fi
-          else
-            echo "source_type=url" >> $GITHUB_OUTPUT
-            echo "url=$SOURCE" >> $GITHUB_OUTPUT
-            echo "Detected direct download URL"
-          fi
-
-      # --- LẤY FILE ISO ---
-      - name: Lấy file ISO từ URL trực tiếp
-        if: steps.detect_source.outputs.source_type == 'url'
-        run: |
-          echo ">>> Đang tải ISO từ URL: ${{ steps.detect_source.outputs.url }}"
-          wget -q -O windows.iso "${{ steps.detect_source.outputs.url }}"
-          echo "ISO_PATH=windows.iso" >> $GITHUB_ENV
-
-      # --- SỬ DỤNG GITHUB CLI ĐỂ TẢI ARTIFACT LỚN ---
-      - name: Lấy thông tin artifacts từ workflow
-        if: steps.detect_source.outputs.source_type == 'workflow'
-        id: get_artifacts
-        run: |
-          REPO="${{ steps.detect_source.outputs.repo }}"
-          RUN_ID="${{ steps.detect_source.outputs.run_id }}"
-          TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          
-          echo "Getting artifacts for run $RUN_ID in $REPO..."
-          
-          # Gọi API để lấy danh sách artifacts
-          ARTIFACTS_JSON=$(curl -s -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts")
-          
-          echo "Artifacts response: $ARTIFACTS_JSON"
-          
-          # Lấy artifact đầu tiên
-          ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[0].id // empty')
-          ARTIFACT_NAME=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[0].name // "Windows-ISO"')
-          
-          if [ -z "$ARTIFACT_ID" ]; then
-            echo "::error::No artifacts found in workflow run"
+          $source = "${{ github.event.inputs.source }}"
+          if ($source -match "github.com/.*/actions/runs/\d+") {
+            Write-Host "Tải artifact từ workflow chưa được tự động hóa cho Windows runner. Hãy tải ISO về trước hoặc dùng direct link."
             exit 1
-          fi
-          
-          echo "artifact_id=$ARTIFACT_ID" >> $GITHUB_OUTPUT
-          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-          echo "Found artifact: $ARTIFACT_NAME (ID: $ARTIFACT_ID)"
+          } else {
+            Invoke-WebRequest -Uri $source -OutFile "windows.iso"
+            echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
 
-      - name: Tải artifact bằng GitHub CLI
-        if: steps.detect_source.outputs.source_type == 'workflow'
+      - name: Debloat ISO (PowerShell)
+        shell: pwsh
         run: |
-          REPO="${{ steps.detect_source.outputs.repo }}"
-          ARTIFACT_ID="${{ steps.get_artifacts.outputs.artifact_id }}"
-          TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          
-          echo "Downloading artifact $ARTIFACT_ID from $REPO..."
-          
-          # Tạo thư mục download
-          mkdir -p ./downloaded_artifact
-          
-          # Tải artifact bằng curl trực tiếp
-          curl -L -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip" \
-            --output ./downloaded_artifact/artifact.zip
-          
-          # Kiểm tra xem download có thành công không
-          if [ ! -f "./downloaded_artifact/artifact.zip" ] || [ ! -s "./downloaded_artifact/artifact.zip" ]; then
-            echo "::error::Failed to download artifact or file is empty"
-            exit 1
-          fi
-          
-          echo "Artifact downloaded successfully, size: $(ls -lh ./downloaded_artifact/artifact.zip | awk '{print $5}')"
-          
-          # Giải nén artifact
-          cd ./downloaded_artifact
-          unzip -q artifact.zip
-          rm artifact.zip
-          cd ..
-          
-          echo "Artifact extracted successfully"
+          $iso = "${{ env.ISO_PATH }}"
+          $output = "debloated-windows.iso"
+          $params = @()
+          if ($iso) { $params += "-isoPath `"$iso`"" }
+          $params += "-outputISO `"$output`""
+          pwsh scripts/debloat-windows-iso.ps1 @params
 
-      - name: Tìm file ISO trong artifact đã tải
-        if: steps.detect_source.outputs.source_type == 'workflow'
-        run: |
-          ISO_FILE=$(find ./downloaded_artifact -name "*.iso" -print -quit)
-          if [ -z "$ISO_FILE" ]; then
-            echo "::error::Không tìm thấy file .iso nào trong artifact!"
-            exit 1
-          fi
-          echo ">>> Tìm thấy file ISO: $ISO_FILE"
-          echo "ISO_PATH=${ISO_FILE}" >> $GITHUB_ENV
-      
-      # --- XÁC ĐỊNH TÊN CƠ SỞ CHO FILE ĐẦU RA ---
-      - name: Determine Output Basename
-        id: name_generator
-        run: |
-          if [ "${{ steps.detect_source.outputs.source_type }}" == "workflow" ]; then
-            # Sử dụng tên artifact đã lấy được
-            ARTIFACT_NAME="${{ steps.get_artifacts.outputs.artifact_name }}"
-            echo "BASENAME=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-            echo "Using artifact name: $ARTIFACT_NAME"
-          else
-            # Nếu từ URL, lấy tên file từ URL và bỏ đuôi .iso
-            URL_FILENAME=$(basename "${{ steps.detect_source.outputs.url }}")
-            BASENAME="${URL_FILENAME%.*}"
-            if [ -z "$BASENAME" ] || [ "$BASENAME" = "$URL_FILENAME" ]; then
-              BASENAME="Windows-ISO"
-            fi
-            echo "BASENAME=$BASENAME" >> $GITHUB_OUTPUT
-            echo "Using URL filename: $BASENAME"
-          fi
-
-      - name: Cấp quyền thực thi cho script
-        run: chmod +x debloat_windows.sh
-
-      # --- CHẠY SCRIPT DEBLOAT ---
-      - name: Chạy script Debloat
-        run: |
-          # Truyền vào 2 tham số: đường dẫn ISO và tên cơ sở
-          ./debloat_windows.sh "${{ env.ISO_PATH }}" "${{ steps.name_generator.outputs.BASENAME }}"
-
-      - name: Tải lên ISO đã debloat
+      - name: Upload debloated ISO
         uses: actions/upload-artifact@v4
         with:
-          name: debloated-${{ steps.name_generator.outputs.BASENAME }} # Đặt tên cho artifact tải lên
-          path: debloated-*.iso # Wildcard vẫn hoạt động tốt
+          name: debloated-windows
+          path: debloated-windows.iso
           retention-days: 5
 
-      - name: Tạo summary
+      - name: Summary
         run: |
-          echo "## Windows ISO Debloat Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Source Type:** ${{ steps.detect_source.outputs.source_type }}" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.detect_source.outputs.source_type }}" == "workflow" ]; then
-            echo "**Repository:** ${{ steps.detect_source.outputs.repo }}" >> $GITHUB_STEP_SUMMARY
-            echo "**Run ID:** ${{ steps.detect_source.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
-            echo "**Artifact:** ${{ steps.get_artifacts.outputs.artifact_name }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Source URL:** ${{ steps.detect_source.outputs.url }}" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Output File:** debloated-${{ steps.name_generator.outputs.BASENAME }}.iso" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Removed Components:" >> $GITHUB_STEP_SUMMARY
-          echo "- Cortana" >> $GITHUB_STEP_SUMMARY
-          echo "- Bing News & Weather" >> $GITHUB_STEP_SUMMARY
-          echo "- Get Help & Get Started" >> $GITHUB_STEP_SUMMARY
-          echo "- People, Skype, Alarms & Clock" >> $GITHUB_STEP_SUMMARY
-          echo "- Camera, Mail and Calendar" >> $GITHUB_STEP_SUMMARY
-          echo "- Feedback Hub, Maps, Voice Recorder" >> $GITHUB_STEP_SUMMARY
-          echo "- Xbox Apps" >> $GITHUB_STEP_SUMMARY
-          echo "- Various Microsoft Store apps" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Usage:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Download the debloated ISO artifact" >> $GITHUB_STEP_SUMMARY
-          echo "2. Burn to USB or DVD" >> $GITHUB_STEP_SUMMARY
-          echo "3. Install Windows with reduced bloatware" >> $GITHUB_STEP_SUMMARY 
+          echo "## Windows ISO Debloat Summary" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "**Output File:** debloated-windows.iso" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Usage:" >> $env:GITHUB_STEP_SUMMARY
+          echo "1. Download the debloated ISO artifact" >> $env:GITHUB_STEP_SUMMARY
+          echo "2. Burn to USB or DVD" >> $env:GITHUB_STEP_SUMMARY
+          echo "3. Install Windows with reduced bloatware" >> $env:GITHUB_STEP_SUMMARY 
