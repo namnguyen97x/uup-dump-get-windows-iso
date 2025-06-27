@@ -235,6 +235,10 @@ if ! command -v genisoimage &> /dev/null; then
   sudo apt-get install -y genisoimage
 fi
 
+# Trước khi tạo lại ISO bootable mới, cấp quyền ghi cho thư mục iso_extracted
+echo ">>> Cấp quyền cho thư mục iso_extracted..."
+sudo chown -R $(whoami) iso_extracted
+
 # Đảm bảo file boot có quyền đọc (nếu cần)
 sudo chmod +r iso_extracted/boot/etfsboot.com
 
@@ -251,9 +255,6 @@ else
     -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -boot-info-table \
     iso_extracted
 fi
-
-# Trước khi tạo lại ISO bootable mới, cấp quyền ghi cho thư mục iso_extracted
-sudo chown -R $(whoami) iso_extracted
 
 # 6. Dọn dẹp
 echo ">>> 6. Dọn dẹp thư mục tạm"
