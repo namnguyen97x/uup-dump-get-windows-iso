@@ -8,6 +8,7 @@ param(
     [string]$outputISO = ""
 )
 
+Write-Host "=== BẮT ĐẦU MOUNT ISO ==="
 # 1. Mount ISO and copy contents
 if (-not $isoPath) {
     Add-Type -AssemblyName System.Windows.Forms
@@ -28,6 +29,7 @@ $mount = Mount-DiskImage -ImagePath $isoPath -PassThru
 $drive = ($mount | Get-Volume).DriveLetter + ":\"
 robocopy $drive $dest /E /COPY:DAT /R:3 /W:5 /MT:8
 Dismount-DiskImage -ImagePath $isoPath
+Write-Host "=== ĐÃ MOUNT ISO, BẮT ĐẦU COPY ==="
 
 # 2. Mount install.wim
 $wim = Join-Path $dest "sources\install.wim"
@@ -43,6 +45,7 @@ if ($winEdition) {
     }
 }
 Mount-WindowsImage -ImagePath $wim -Index $imageIndex -Path $mountdir
+Write-Host "=== BẮT ĐẦU MOUNT WIM ==="
 
 # 3. Debloat: Remove AppX, Capabilities, Features, OneDrive, Edge, etc.
 $appx = @(
@@ -51,7 +54,9 @@ $appx = @(
     "Microsoft.WindowsCommunicationsapps*", "Microsoft.ZuneMusic*", "Microsoft.ZuneVideo*", "Microsoft.Xbox*",
     "Microsoft.People*", "Microsoft.YourPhone*", "Microsoft.SkypeApp*", "Microsoft.Todos*", "Microsoft.Wallet*"
 )
+Write-Host "=== ĐÃ MOUNT WIM, BẮT ĐẦU DEBLOAT ==="
 foreach ($pattern in $appx) {
+    Write-Host "Đang xóa AppX: $pattern"
     Get-ProvisionedAppxPackage -Path $mountdir | Where-Object { $_.PackageName -like $pattern } | ForEach-Object {
         Remove-ProvisionedAppxPackage -Path $mountdir -PackageName $_.PackageName
     }
@@ -87,15 +92,18 @@ foreach ($pkg in $features) {
         Remove-WindowsPackage -Path $mountdir -PackageName $_.PackageName
     }
 }
-
+Write-Host "=== ĐÃ DEBLOAT, BẮT ĐẦU PATCH REGISTRY ==="
 # 4. Registry Tweaks (ví dụ: tắt Telemetry, quảng cáo, bypass TPM...)
 reg load HKLM\zSYSTEM "$mountdir\Windows\System32\config\SYSTEM"
 reg add "HKLM\zSYSTEM\Setup\LabConfig" /v "BypassTPMCheck" /t REG_DWORD /d 1 /f
 reg add "HKLM\zSYSTEM\Setup\LabConfig" /v "BypassSecureBootCheck" /t REG_DWORD /d 1 /f
 reg unload HKLM\zSYSTEM
+Write-Host "=== UNMOUNT WIM ==="
 
 # 5. Unmount & commit
 Dismount-WindowsImage -Path $mountdir -Save
+Write-Host "=== ĐÃ UNMOUNT, BẮT ĐẦU TẠO ISO ==="
 
 # 6. Tạo lại ISO (dùng oscdimg hoặc tool khác)
-Write-Host "Debloat hoàn tất! Bạn có thể tạo lại ISO từ thư mục $dest." 
+Write-Host "Debloat hoàn tất! Bạn có thể tạo lại ISO từ thư mục $dest."
+Write-Host "=== ĐÃ HOÀN THÀNH DEBLOAT ===" 
