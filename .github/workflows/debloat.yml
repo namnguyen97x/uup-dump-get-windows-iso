@@ -31,8 +31,28 @@ jobs:
                   $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$runId/artifacts"
                   $headers = @{ Authorization = "Bearer $token"; "X-GitHub-Api-Version" = "2022-11-28" }
                   $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
+                  
+                  Write-Host "=== Available Artifacts ==="
+                  if ($artifacts.artifacts.Count -eq 0) {
+                      Write-Host "No artifacts found in this workflow run"
+                  } else {
+                      $artifacts.artifacts | ForEach-Object { 
+                          Write-Host "  - $($_.name) (Size: $($_.size_in_bytes) bytes)"
+                      }
+                  }
+                  
+                  # Try to find ISO artifact - first look for exact "iso" match, then any artifact
                   $artifact = $artifacts.artifacts | Where-Object { $_.name -match "iso" } | Select-Object -First 1
-                  if (-not $artifact) { Write-Error "No ISO artifact found"; exit 1 }
+                  if (-not $artifact) {
+                      Write-Host "No artifact with 'iso' in name found, trying first available artifact..."
+                      $artifact = $artifacts.artifacts | Select-Object -First 1
+                  }
+                  
+                  if (-not $artifact) { 
+                      Write-Error "No artifacts found in workflow run $runId"
+                      Write-Host "Please ensure the source workflow has uploaded artifacts"
+                      exit 1 
+                  }
                   $downloadUrl = $artifact.archive_download_url
                   Write-Host "Downloading artifact: $($artifact.name)"
                   Invoke-WebRequest -Uri $downloadUrl -Headers $headers -OutFile artifact.zip
