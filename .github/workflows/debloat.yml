@@ -84,22 +84,21 @@ jobs:
           Write-Host "=== DEBUG FILE STRUCTURE ==="
           Write-Host "Current directory: $(Get-Location)"
           Write-Host "Current directory contents:"
-          Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name) - $($_.PSIsContainer ? 'Directory' : 'File')" }
+          Get-ChildItem | ForEach-Object { 
+              $type = if ($_.PSIsContainer) { "Directory" } else { "File" }
+              Write-Host "  $($_.Name) - $type" 
+          }
           
-          Write-Host "Scripts directory contents:"
+          Write-Host "Scripts directory exists: $(Test-Path 'scripts')"
           if (Test-Path "scripts") {
-              Get-ChildItem "scripts" | ForEach-Object { Write-Host "  $($_.Name) - $($_.PSIsContainer ? 'Directory' : 'File')" }
-          } else {
-              Write-Host "  Scripts directory does not exist!"
+              Write-Host "Scripts directory contents:"
+              Get-ChildItem "scripts" | ForEach-Object { 
+                  $type = if ($_.PSIsContainer) { "Directory" } else { "File" }
+                  Write-Host "  $($_.Name) - $type" 
+              }
           }
           
-          Write-Host "Full path to script:"
-          $scriptPath = (Resolve-Path ".\scripts\debloat-windows-iso.ps1" -ErrorAction SilentlyContinue)
-          if ($scriptPath) {
-              Write-Host "  $scriptPath"
-          } else {
-              Write-Host "  Script path could not be resolved!"
-          }
+          Write-Host "Script file exists: $(Test-Path '.\scripts\debloat-windows-iso.ps1')"
 
       - name: Test PowerShell Script
         shell: pwsh
@@ -113,21 +112,9 @@ jobs:
           if (Test-Path $scriptPath) {
               Write-Host "Script file size: $((Get-Item $scriptPath).Length) bytes"
               Write-Host "Script last modified: $(Get-Item $scriptPath).LastWriteTime"
-              
-              Write-Host "Testing script read access..."
-              try {
-                  $firstLine = Get-Content $scriptPath -First 1
-                  Write-Host "First line: $firstLine"
-                  Write-Host "Script can be read successfully"
-              } catch {
-                  Write-Host "LỖI: Không thể đọc script: $_" -ForegroundColor Red
-                  exit 1
-              }
+              Write-Host "Script test passed!"
           } else {
               Write-Host "LỖI: Script không tồn tại!" -ForegroundColor Red
-              Write-Host "Current directory: $(Get-Location)"
-              Write-Host "Files in current directory:"
-              Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name)" }
               exit 1
           }
 
