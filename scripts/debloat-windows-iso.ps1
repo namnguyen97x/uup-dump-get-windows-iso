@@ -44,6 +44,11 @@ if (!(Test-Path $isoPath)) {
     Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name)" }
     exit 1
 }
+
+# Convert to absolute path
+$isoPath = (Resolve-Path $isoPath).Path
+Write-Host "ISO absolute path: $isoPath"
+
 $size = (Get-Item $isoPath).Length / 1GB
 Write-Host "File ISO: $isoPath, Dung lượng: $([math]::Round($size,2)) GB"
 
@@ -57,6 +62,7 @@ New-Item -ItemType Directory -Path $dest -Force | Out-Null
 
 Write-Host "Mount ISO để copy nội dung..."
 try {
+    Write-Host "Attempting to mount ISO: $isoPath"
     $mount = Mount-DiskImage -ImagePath $isoPath -PassThru -ErrorAction Stop
     $drive = ($mount | Get-Volume).DriveLetter + ":\"
     Write-Host "ISO đã mount tại: $drive"
@@ -73,7 +79,30 @@ try {
     Write-Host "=== ĐÃ COPY XONG ISO ==="
 } catch {
     Write-Host "LỖI: Không mount được ISO! $_" -ForegroundColor Red
-    exit 1
+    Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Error type: $($_.Exception.GetType().Name)" -ForegroundColor Red
+    
+    # Try alternative mounting method
+    Write-Host "Thử phương pháp mount khác..."
+    try {
+        $mount = Mount-DiskImage -ImagePath $isoPath -PassThru -StorageType ISO -ErrorAction Stop
+        $drive = ($mount | Get-Volume).DriveLetter + ":\"
+        Write-Host "ISO đã mount thành công tại: $drive"
+        
+        Write-Host "Copy nội dung ISO..."
+        robocopy $drive $dest /E /COPY:DAT /R:3 /W:5 /MT:8
+        if ($LASTEXITCODE -gt 7) {
+            Write-Host "LỖI: Robocopy failed với exit code $LASTEXITCODE" -ForegroundColor Red
+            exit 1
+        }
+        
+        Write-Host "Unmount ISO..."
+        Dismount-DiskImage -ImagePath $isoPath
+        Write-Host "=== ĐÃ COPY XONG ISO ==="
+    } catch {
+        Write-Host "LỖI: Cả hai phương pháp mount đều thất bại! $_" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # 2. Check if install.wim exists
