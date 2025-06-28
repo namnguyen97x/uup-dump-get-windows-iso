@@ -99,12 +99,37 @@ jobs:
               exit 1
           }
           
+          # Check file size
+          $fileSize = (Get-Item $iso).Length / 1GB
+          Write-Host "File ISO size: $([math]::Round($fileSize,2)) GB"
+          
+          # Check available disk space
+          $drive = (Get-Item $iso).PSDrive
+          $freeSpace = $drive.Free / 1GB
+          Write-Host "Available disk space on $($drive.Name): $([math]::Round($freeSpace,2)) GB"
+          
+          if ($freeSpace -lt 20) {
+              Write-Host "CẢNH BÁO: Ít hơn 20GB trống, có thể gặp lỗi!" -ForegroundColor Yellow
+          }
+          
           $output = "debloated-windows.iso"
           Write-Host "=== BẮT ĐẦU DEBLOAT ==="
           Write-Host "Input ISO: $iso"
           Write-Host "Output ISO: $output"
           
-          & ".\scripts\debloat-windows-iso.ps1" -isoPath $iso -outputISO $output
+          # Run script with detailed error handling
+          try {
+              $result = & ".\scripts\debloat-windows-iso.ps1" -isoPath $iso -outputISO $output 2>&1
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Host "LỖI: Script PowerShell trả về exit code $LASTEXITCODE" -ForegroundColor Red
+                  Write-Host "Output: $result" -ForegroundColor Red
+                  exit $LASTEXITCODE
+              }
+              Write-Host "Script PowerShell chạy thành công!" -ForegroundColor Green
+          } catch {
+              Write-Host "LỖI: Không thể chạy script PowerShell: $_" -ForegroundColor Red
+              exit 1
+          }
 
       - name: Upload debloated ISO
         uses: actions/upload-artifact@v4
