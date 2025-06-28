@@ -73,9 +73,11 @@ try {
         Write-Host "LỖI: Robocopy failed với exit code $LASTEXITCODE" -ForegroundColor Red
         exit 1
     }
+    Write-Host "Robocopy completed successfully with exit code $LASTEXITCODE"
     
     Write-Host "Unmount ISO..."
     Dismount-DiskImage -ImagePath $isoPath
+    Write-Host "ISO unmounted successfully"
     Write-Host "=== ĐÃ COPY XONG ISO ==="
     
     # Debug: Check what was copied
@@ -100,6 +102,7 @@ try {
     Write-Host "LỖI: Không mount được ISO! $_" -ForegroundColor Red
     Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "Error type: $($_.Exception.GetType().Name)" -ForegroundColor Red
+    Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
     
     # Debug: Check what was copied even if there was an error
     Write-Host "=== DEBUG: Kiểm tra nội dung sau lỗi ==="
@@ -118,8 +121,7 @@ try {
         }
     }
     
-    # Try alternative mounting method
-    Write-Host "Thử phương pháp mount khác..."
+    Write-Host "=== THỬ PHƯƠNG PHÁP MOUNT KHÁC ==="
     try {
         $mount = Mount-DiskImage -ImagePath $isoPath -PassThru -StorageType ISO -ErrorAction Stop
         $drive = ($mount | Get-Volume).DriveLetter + ":\"
