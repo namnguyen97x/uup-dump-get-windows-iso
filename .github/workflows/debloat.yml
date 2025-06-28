@@ -78,6 +78,34 @@ jobs:
               echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
 
+      - name: Test PowerShell Script
+        shell: pwsh
+        run: |
+          Write-Host "=== TESTING POWERSHELL SCRIPT ==="
+          $scriptPath = ".\scripts\debloat-windows-iso.ps1"
+          
+          Write-Host "Script path: $scriptPath"
+          Write-Host "Script exists: $(Test-Path $scriptPath)"
+          
+          if (Test-Path $scriptPath) {
+              Write-Host "Script content (first 20 lines):"
+              Get-Content $scriptPath | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
+              
+              Write-Host "Testing script syntax..."
+              $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $scriptPath -Raw), [ref]$null)
+              Write-Host "Script syntax is valid!"
+              
+              Write-Host "Testing script parameters..."
+              $help = Get-Help $scriptPath -Full
+              Write-Host "Script parameters:"
+              $help.Parameters.Parameter | ForEach-Object { 
+                  Write-Host "  - $($_.Name): $($_.Type.Name)" 
+              }
+          } else {
+              Write-Host "LỖI: Script không tồn tại!" -ForegroundColor Red
+              exit 1
+          }
+
       - name: Debloat ISO (PowerShell)
         shell: pwsh
         run: |
@@ -117,17 +145,33 @@ jobs:
           Write-Host "Input ISO: $iso"
           Write-Host "Output ISO: $output"
           
+          # Check if running as Administrator
+          $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+          Write-Host "Running as Administrator: $isAdmin"
+          
           # Run script with detailed error handling
           try {
-              $result = & ".\scripts\debloat-windows-iso.ps1" -isoPath $iso -outputISO $output 2>&1
-              if ($LASTEXITCODE -ne 0) {
-                  Write-Host "LỖI: Script PowerShell trả về exit code $LASTEXITCODE" -ForegroundColor Red
-                  Write-Host "Output: $result" -ForegroundColor Red
-                  exit $LASTEXITCODE
+              Write-Host "Executing PowerShell script..."
+              $scriptPath = ".\scripts\debloat-windows-iso.ps1"
+              Write-Host "Script path: $scriptPath"
+              Write-Host "Script exists: $(Test-Path $scriptPath)"
+              
+              # Capture all output including errors
+              $result = & $scriptPath -isoPath $iso -outputISO $output 2>&1
+              $exitCode = $LASTEXITCODE
+              
+              Write-Host "Script execution completed with exit code: $exitCode"
+              Write-Host "Script output:"
+              $result | ForEach-Object { Write-Host "  $_" }
+              
+              if ($exitCode -ne 0) {
+                  Write-Host "LỖI: Script PowerShell trả về exit code $exitCode" -ForegroundColor Red
+                  exit $exitCode
               }
               Write-Host "Script PowerShell chạy thành công!" -ForegroundColor Green
           } catch {
               Write-Host "LỖI: Không thể chạy script PowerShell: $_" -ForegroundColor Red
+              Write-Host "Exception details: $($_.Exception.Message)" -ForegroundColor Red
               exit 1
           }
 
