@@ -23,6 +23,11 @@ jobs:
         run: |
           $source = "${{ github.event.inputs.source }}"
           $token = "$env:GITHUB_TOKEN"
+          
+          Write-Host "=== DEBUG: Download Parameters ==="
+          Write-Host "Source: $source"
+          Write-Host "Token available: $($token.Length -gt 0)"
+          
           if ($source -match "github.com/.*/actions/runs/(\d+)") {
               if ($source -match "github.com/([^/]+/[^/]+)/actions/runs/(\d+)") {
                   $repo = $matches[1]
@@ -30,6 +35,8 @@ jobs:
                   Write-Host "Detected workflow run: $repo, $runId"
                   $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$runId/artifacts"
                   $headers = @{ Authorization = "Bearer $token"; "X-GitHub-Api-Version" = "2022-11-28" }
+                  
+                  Write-Host "Fetching artifacts from: $artifactsUrl"
                   $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
                   
                   Write-Host "=== Available Artifacts ==="
@@ -53,29 +60,74 @@ jobs:
                       Write-Host "Please ensure the source workflow has uploaded artifacts"
                       exit 1 
                   }
+                  
                   $downloadUrl = $artifact.archive_download_url
                   Write-Host "Downloading artifact: $($artifact.name)"
-                  Invoke-WebRequest -Uri $downloadUrl -Headers $headers -OutFile artifact.zip
-                  Expand-Archive artifact.zip -DestinationPath artifact
+                  Write-Host "Download URL: $downloadUrl"
+                  
+                  # Download with progress
+                  $webClient = New-Object System.Net.WebClient
+                  $webClient.Headers.Add("Authorization", "Bearer $token")
+                  $webClient.Headers.Add("User-Agent", "GitHub-Actions-Workflow")
+                  
+                  try {
+                      $webClient.DownloadFile($downloadUrl, "artifact.zip")
+                      Write-Host "Download completed successfully"
+                  } catch {
+                      Write-Host "WebClient download failed, trying Invoke-WebRequest..."
+                      Invoke-WebRequest -Uri $downloadUrl -Headers $headers -OutFile artifact.zip
+                  }
+                  
+                  Write-Host "Extracting artifact..."
+                  Expand-Archive artifact.zip -DestinationPath artifact -Force
+                  
                   Write-Host "=== Danh sách file trong artifact sau khi giải nén ==="
                   Get-ChildItem artifact -Recurse | ForEach-Object { Write-Host $_.FullName }
+                  
                   $iso = Get-ChildItem artifact -Recurse -Filter *.iso | Select-Object -First 1
                   if (-not $iso) {
                       Write-Host "LỖI: Không tìm thấy file ISO trong artifact!" -ForegroundColor Red
+                      Write-Host "Available files in artifact:"
+                      Get-ChildItem artifact -Recurse | ForEach-Object { Write-Host "  $($_.Name)" }
                       exit 1
                   }
+                  
                   Write-Host "Đã tìm thấy file ISO: $($iso.FullName)"
                   Copy-Item $iso.FullName windows.iso -Force
                   Write-Host "Đã copy file ISO về: windows.iso"
+                  
+                  # Set environment variable
                   echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
+                  
+                  # Clean up
+                  Remove-Item artifact.zip -Force -ErrorAction SilentlyContinue
+                  Remove-Item artifact -Recurse -Force -ErrorAction SilentlyContinue
+                  
               } else {
                   Write-Error "Invalid workflow URL format"
                   exit 1
               }
           } else {
-              Invoke-WebRequest -Uri $source -OutFile "windows.iso"
-              Write-Host "Đã tải file ISO từ direct link về: windows.iso"
-              echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
+              Write-Host "Detected direct download link"
+              Write-Host "Downloading ISO from: $source"
+              
+              try {
+                  Invoke-WebRequest -Uri $source -OutFile "windows.iso" -UseBasicParsing
+                  Write-Host "Đã tải file ISO từ direct link về: windows.iso"
+                  echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
+              } catch {
+                  Write-Host "LỖI: Không thể tải file ISO từ link: $_" -ForegroundColor Red
+                  exit 1
+              }
+          }
+          
+          # Verify ISO file
+          if (Test-Path "windows.iso") {
+              $fileSize = (Get-Item "windows.iso").Length / 1GB
+              Write-Host "ISO file verified: windows.iso ($([math]::Round($fileSize,2)) GB)"
+          } else {
+              Write-Host "LỖI: ISO file not found after download!" -ForegroundColor Red
+              exit 1
           }
 
       - name: Debloat ISO (PowerShell)
@@ -118,6 +170,30 @@ jobs:
           $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
           Write-Host "Running as Administrator: $isAdmin"
           
+          # Check required tools
+          Write-Host "=== Checking required tools ==="
+          $tools = @("dism", "robocopy", "reg")
+          foreach ($tool in $tools) {
+              $result = Get-Command $tool -ErrorAction SilentlyContinue
+              if ($result) {
+                  Write-Host "✓ $tool is available"
+              } else {
+                  Write-Host "✗ $tool is NOT available" -ForegroundColor Red
+              }
+          }
+          
+          # Check for optional tools
+          Write-Host "=== Checking optional tools ==="
+          $optionalTools = @("oscdimg", "wimlib-imagex", "7z")
+          foreach ($tool in $optionalTools) {
+              $result = Get-Command $tool -ErrorAction SilentlyContinue
+              if ($result) {
+                  Write-Host "✓ $tool is available"
+              } else {
+                  Write-Host "✗ $tool is NOT available (will use alternative method)" -ForegroundColor Yellow
+              }
+          }
+          
           # Run script with detailed error handling
           try {
               Write-Host "Executing PowerShell script..."
@@ -125,7 +201,15 @@ jobs:
               Write-Host "Script path: $scriptPath"
               Write-Host "Script exists: $(Test-Path $scriptPath)"
               
+              if (-not (Test-Path $scriptPath)) {
+                  Write-Host "LỖI: Script không tồn tại tại: $scriptPath" -ForegroundColor Red
+                  Write-Host "Available files in scripts directory:"
+                  Get-ChildItem ".\scripts\" | ForEach-Object { Write-Host "  $($_.Name)" }
+                  exit 1
+              }
+              
               # Capture all output including errors
+              Write-Host "=== EXECUTING SCRIPT ==="
               $result = & $scriptPath -isoPath $iso -outputISO $output 2>&1
               $exitCode = $LASTEXITCODE
               
@@ -141,6 +225,19 @@ jobs:
           } catch {
               Write-Host "LỖI: Không thể chạy script PowerShell: $_" -ForegroundColor Red
               Write-Host "Exception details: $($_.Exception.Message)" -ForegroundColor Red
+              Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
+              exit 1
+          }
+          
+          # Verify output
+          if (Test-Path $output) {
+              $outputSize = (Get-Item $output).Length / 1GB
+              Write-Host "=== VERIFICATION ==="
+              Write-Host "Output ISO created successfully: $output"
+              Write-Host "Output size: $([math]::Round($outputSize,2)) GB"
+              Write-Host "Debloat process completed successfully!"
+          } else {
+              Write-Host "LỖI: Output ISO not found: $output" -ForegroundColor Red
               exit 1
           }
 
@@ -156,6 +253,17 @@ jobs:
           echo "## Windows ISO Debloat Summary" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "**Output File:** debloated-windows.iso" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### What was removed:" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Microsoft Edge" >> $env:GITHUB_STEP_SUMMARY
+          echo "- OneDrive" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Windows Store Apps (News, Weather, Alarms, etc.)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Windows Capabilities (Handwriting, OCR, Speech, etc.)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Windows Features (Internet Explorer, Media Player, etc.)" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Registry tweaks applied:" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Bypass TPM check" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Bypass Secure Boot check" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "### Usage:" >> $env:GITHUB_STEP_SUMMARY
           echo "1. Download the debloated ISO artifact" >> $env:GITHUB_STEP_SUMMARY

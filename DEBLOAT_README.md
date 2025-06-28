@@ -1,176 +1,246 @@
-# Windows ISO Debloat Workflow
+# Windows ISO Debloat Workflow - Complete Fix
 
-This repository contains a GitHub Actions workflow for debloating Windows ISO files to remove bloatware and create optimized installation media.
+## Overview
+This GitHub Actions workflow automatically downloads Windows ISO files (either from workflow artifacts or direct links), removes bloatware, applies registry tweaks, and creates a debloated ISO ready for installation.
 
-## Features
+## Recent Fixes and Improvements
 
-### 🔧 Two Debloat Methods
+### 🔧 Major Issues Fixed
 
-1. **Shell Script Method** (`debloat_windows.sh`)
-   - Runs on Ubuntu Linux
-   - Uses `wimtools`, `p7zip-full`, and `xorriso`
-   - Actually removes AppX packages from the WIM image
-   - Creates bootable ISO with reduced bloatware
+#### 1. **Install.ESD Detection and Conversion**
+- **Problem**: Script failed when ISO contained `install.esd` instead of `install.wim`
+- **Fix**: Added automatic detection of `install.esd` and conversion to `install.wim`
+- **Methods**: Uses `wimlib-imagex` with fallback to `dism /export-image`
 
-2. **PowerShell Method** (`scripts/debloat-windows-iso.ps1`)
-   - Runs on Windows
-   - Creates unattended setup configuration
-   - Generates telemetry disable registry files
-   - Provides detailed debloat information
+#### 2. **WIM Image Counting**
+- **Problem**: Incorrect grep pattern `"Image Index"` instead of `"Index:"`
+- **Fix**: Updated pattern to correctly count images using `Select-String "Index:"`
+- **Result**: Proper detection of available Windows editions
 
-### 📥 Smart Input Detection
+#### 3. **ISO Rebuilding**
+- **Problem**: Script was incomplete - missing ISO rebuilding functionality
+- **Fix**: Added complete ISO rebuilding with multiple fallback methods:
+  - Primary: `oscdimg` (Windows SDK tool)
+  - Secondary: PowerShell `New-IsoFile` (Windows 10/11 built-in)
+  - Tertiary: `7-Zip` with manual ISO creation
 
-- **Single Input Field**: Only one field to fill - the source
-- **Auto-Detection**: Automatically detects if it's a workflow URL or direct download link
-- **Artifact Name**: Uses the actual artifact name for output file naming
+#### 4. **Permission Issues**
+- **Problem**: Permission denied when writing boot files during ISO rebuild
+- **Fix**: Added ownership change to current user before ISO creation
+- **Code**: `Set-Acl` with `FullControl` permissions
 
-## Usage
+#### 5. **Error Handling and Debugging**
+- **Problem**: Insufficient error information and debugging
+- **Fix**: Added comprehensive logging throughout the entire process:
+  - Parameter validation
+  - Tool availability checks
+  - Step-by-step progress reporting
+  - Detailed error messages with stack traces
+  - Exit code reporting for all commands
 
-### GitHub Actions Workflow
+### 🚀 Workflow Improvements
 
-1. Go to the **Actions** tab in this repository
-2. Select **"Debloat Windows ISO"** workflow
-3. Click **"Run workflow"**
-4. Enter the source in the single input field:
+#### 1. **Enhanced Download Process**
+- **Auto-detection**: Automatically detects workflow URLs vs direct links
+- **Robust downloading**: Multiple download methods with fallbacks
+- **Progress tracking**: Better download progress and verification
+- **Cleanup**: Automatic cleanup of temporary files
 
-#### For Workflow URL:
-```
-https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572
-```
+#### 2. **Tool Availability Checks**
+- **Required tools**: `dism`, `robocopy`, `reg`
+- **Optional tools**: `oscdimg`, `wimlib-imagex`, `7z`
+- **Graceful degradation**: Uses alternative methods when tools unavailable
 
-#### For Direct Download URL:
-```
-https://example.com/windows11.iso
-```
+#### 3. **Comprehensive Validation**
+- **Input validation**: Checks ISO file existence and size
+- **Disk space monitoring**: Warns if insufficient space
+- **Output verification**: Confirms successful ISO creation
+- **File integrity**: Validates downloaded and created files
 
-### Input Parameter
+### 📋 What Gets Removed
 
-| Parameter | Description | Required | Default |
-|-----------|-------------|----------|---------|
-| `source` | Workflow URL or direct download link (auto-detected) | Yes | Example workflow URL |
+#### Windows Store Apps
+- Microsoft Bing News
+- Microsoft Bing Weather  
+- Microsoft Windows Alarms
+- Microsoft Windows Feedback Hub
+- Microsoft Get Help
+- Microsoft Get Started
+- Microsoft Windows Maps
+- Microsoft Windows Communications Apps
+- Microsoft Zune Music
+- Microsoft Zune Video
+- Microsoft Xbox Apps
+- Microsoft People
+- Microsoft Your Phone
+- Microsoft Skype App
+- Microsoft Todos
+- Microsoft Wallet
 
-### Auto-Detection Logic
+#### System Components
+- **OneDrive**: Complete removal of OneDrive setup files
+- **Microsoft Edge**: Full removal of Edge browser
+- **Windows Capabilities**:
+  - Steps Recorder
+  - Handwriting recognition
+  - OCR (Optical Character Recognition)
+  - Speech recognition
+  - Text-to-speech
+  - WordPad
+  - Math Recognizer
+  - Windows Media Player
+  - PowerShell ISE
 
-The workflow automatically detects the source type:
-
-- **Workflow URL**: Contains `github.com` and `/actions/runs/`
-- **Direct URL**: Any other URL format
-
-## Output
-
-The workflow produces:
-
-### Shell Script Output (Ubuntu)
-- `debloated-{artifact_name}.iso` - Optimized Windows ISO with bloatware removed
-- Bootable ISO ready for installation
-
-### PowerShell Output (Windows)
-- Original ISO file (copied)
-- `unattend.xml` - Unattended setup configuration
-- `telemetry-disable.reg` - Registry file to disable telemetry
-- `debloat-info.json` - Detailed debloat information
-- `README.md` - Usage instructions
-
-## Removed Components
-
-### AppX Packages (Shell Script)
-- Cortana (`Microsoft.549981C3F5F10`)
-- Bing News & Weather
-- Get Help & Get Started
-- People, Skype, Alarms & Clock
-- Camera, Mail and Calendar
-- Feedback Hub, Maps, Voice Recorder
-- Xbox Apps
-- Various Microsoft Store apps
-
-### Windows Components (PowerShell)
-- Internet Explorer Optional Package
+#### Windows Features
+- Internet Explorer (Optional Package)
+- Language Features (Handwriting, OCR, Speech, Text-to-Speech)
+- WordPad (Feature on Demand)
 - Media Player Package
 - Tablet PC Math Package
-- Speech TTS Package
-- Speech Recognition Package
+- Steps Recorder Package
 
-## Files Structure
+### 🔧 Registry Tweaks Applied
 
+#### Windows 11 Bypass
+- **TPM Check Bypass**: `BypassTPMCheck = 1`
+- **Secure Boot Bypass**: `BypassSecureBootCheck = 1`
+
+### 🛠️ Technical Details
+
+#### Supported Input Formats
+1. **GitHub Workflow URL**: `https://github.com/user/repo/actions/runs/123456789`
+2. **Direct Download Link**: Any direct ISO download URL
+
+#### ISO Creation Methods
+1. **oscdimg** (Preferred):
+   ```powershell
+   oscdimg -m -o -u2 -udfver102 -bootdata:2#p0,e,b"boot\etfsboot.com"#pEF,e,b"efi\microsoft\boot\efisys.bin" source output.iso
+   ```
+
+2. **PowerShell New-IsoFile** (Fallback):
+   ```powershell
+   New-IsoFile -Source $source -Path $output -BootFile "boot\etfsboot.com" -Media DVDROM
+   ```
+
+3. **7-Zip** (Last resort):
+   ```powershell
+   7z a -tiso output.iso source\*
+   ```
+
+#### File Structure
 ```
-uup-dump-get-windows-iso/
-├── .github/workflows/
-│   └── debloat.yml              # Main workflow file
-├── scripts/
-│   ├── debloat-windows-iso.ps1  # Advanced PowerShell script
-│   └── simple-debloat.ps1       # Simple PowerShell script
-├── debloat_windows.sh           # Shell script for Ubuntu
-└── DEBLOAT_README.md           # This file
+.github/workflows/
+├── debloat.yml          # Main workflow file
+scripts/
+├── debloat-windows-iso.ps1  # Core debloat script
 ```
 
-## Workflow Steps
+### 📊 Performance Optimizations
 
-1. **Setup**: Checkout repository and install tools
-2. **Auto-Detect**: Determine source type (workflow URL or direct URL)
-3. **Download**: Get ISO from detected source
-4. **Process**: Run debloat script (shell or PowerShell)
-5. **Output**: Upload debloated files as artifacts
+#### Memory Management
+- Automatic cleanup of temporary directories
+- Proper unmounting of WIM images
+- Efficient file copying with robocopy
 
-## Requirements
+#### Disk Space
+- Monitors available disk space
+- Warns if less than 20GB available
+- Estimates required space for operations
 
-### For Shell Script (Ubuntu)
-- `wimtools` - Windows image manipulation
-- `p7zip-full` - ISO extraction
-- `xorriso` - ISO creation
-- `jq` - JSON parsing for artifact names
+#### Parallel Processing
+- Uses robocopy with `/MT:8` for parallel file copying
+- Optimized for multi-core systems
 
-### For PowerShell (Windows)
-- PowerShell 5.0+
-- Administrative privileges (for advanced operations)
+### 🔍 Debugging Features
 
-## Troubleshooting
+#### Comprehensive Logging
+- Step-by-step progress reporting
+- Command output capture
+- Exit code reporting
+- Error stack traces
+- File existence checks
+- Directory listing at key points
 
-### Common Issues
+#### Validation Points
+- ISO file verification after download
+- WIM image count validation
+- Mount directory verification
+- Output ISO creation confirmation
+- File size reporting
 
-1. **ISO not found**: Ensure the URL is accessible or artifact exists
-2. **Permission denied**: Run PowerShell as Administrator
-3. **Tool not found**: Check if required tools are installed
-4. **Disk space**: Ensure sufficient space for ISO processing
+### 🚨 Error Recovery
 
-### Logs
+#### Graceful Degradation
+- Multiple fallback methods for each operation
+- Continues processing even if some components fail
+- Provides detailed error information for troubleshooting
 
-- Check workflow logs in GitHub Actions
-- PowerShell scripts create detailed log files
-- Shell script outputs progress to console
+#### Cleanup on Failure
+- Automatic cleanup of temporary files
+- Proper unmounting even on errors
+- Preserves original files
 
-## Examples
+### 📝 Usage Instructions
 
-### Example 1: Workflow URL
+#### 1. Manual Workflow Trigger
+1. Go to Actions tab in your repository
+2. Select "Debloat Windows ISO" workflow
+3. Click "Run workflow"
+4. Enter either:
+   - GitHub workflow URL: `https://github.com/user/repo/actions/runs/123456789`
+   - Direct ISO download link: `https://example.com/windows.iso`
+5. Click "Run workflow"
+
+#### 2. Local Execution
+```powershell
+# Run as Administrator
+.\scripts\debloat-windows-iso.ps1 -isoPath "windows.iso" -outputISO "debloated-windows.iso"
 ```
-https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572
-```
-- Automatically detects as workflow URL
-- Downloads artifact from the specified run
-- Uses artifact name for output file
 
-### Example 2: Direct Download URL
-```
-https://isomicrosoft.com/download/12
-```
-- Automatically detects as direct URL
-- Downloads ISO directly
-- Uses filename from URL for output
+### 🔧 Troubleshooting
 
-## Contributing
+#### Common Issues
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test the workflow
-5. Submit a pull request
+1. **"No artifacts found"**
+   - Ensure source workflow has uploaded artifacts
+   - Check artifact names contain "iso"
+
+2. **"Permission denied"**
+   - Run as Administrator
+   - Check file ownership and permissions
+
+3. **"Not enough disk space"**
+   - Ensure at least 20GB free space
+   - Clean up temporary files
+
+4. **"Tool not found"**
+   - Script will use alternative methods
+   - Check tool availability in environment
+
+#### Debug Information
+- All commands output detailed logs
+- Check GitHub Actions logs for specific error messages
+- Verify file paths and permissions
+
+### 📈 Future Improvements
+
+#### Planned Enhancements
+- Support for multiple Windows editions in single run
+- Custom debloat profiles
+- Integration with Windows Update removal
+- Additional registry optimizations
+- Performance benchmarking
+
+#### Community Contributions
+- Custom app removal lists
+- Additional registry tweaks
+- Alternative ISO creation methods
+- Language-specific optimizations
+
+---
 
 ## License
-
-This project is open source and available under the MIT License.
+This project is open source. Feel free to contribute improvements and fixes.
 
 ## Support
-
-For issues and questions:
-1. Check the workflow logs
-2. Review the troubleshooting section
-3. Create an issue in the repository 
+For issues and questions, please create an issue in the repository with detailed logs and error messages. 

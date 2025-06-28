@@ -36,6 +36,12 @@ if (-not $isoPath) {
     }
 }
 
+# If no outputISO provided, create default name
+if (-not $outputISO) {
+    $outputISO = "debloated-windows.iso"
+    Write-Host "Sử dụng tên output mặc định: $outputISO"
+}
+
 Write-Host "=== BẮT ĐẦU MOUNT ISO ==="
 if (!(Test-Path $isoPath)) {
     Write-Host "LỖI: Không tìm thấy file ISO $isoPath" -ForegroundColor Red
@@ -163,20 +169,97 @@ try {
     }
 }
 
-# 2. Check if install.wim exists
+# 2. Check for install.wim or install.esd
 $wim = Join-Path $dest "sources\install.wim"
+$esd = Join-Path $dest "sources\install.esd"
+
 if (-not (Test-Path $wim)) {
-    Write-Host "LỖI: Không tìm thấy install.wim tại: $wim" -ForegroundColor Red
-    Write-Host "Các file trong sources:" -ForegroundColor Yellow
-    if (Test-Path (Join-Path $dest "sources")) {
-        Get-ChildItem (Join-Path $dest "sources") | ForEach-Object { Write-Host "  $($_.Name)" }
+    if (Test-Path $esd) {
+        Write-Host "Tìm thấy install.esd, chuyển đổi sang install.wim..."
+        try {
+            # Convert ESD to WIM using wimlib-imagex
+            $wimlibPath = "wimlib-imagex"
+            $result = & $wimlibPath export $esd 1 $wim --compress=LZX:21 2>&1
+            $exitCode = $LASTEXITCODE
+            
+            Write-Host "wimlib-imagex export result:"
+            $result | ForEach-Object { Write-Host "  $_" }
+            Write-Host "Exit code: $exitCode"
+            
+            if ($exitCode -ne 0) {
+                Write-Host "LỖI: Không thể chuyển đổi install.esd sang install.wim!" -ForegroundColor Red
+                Write-Host "Trying alternative method with DISM..."
+                
+                # Alternative: Use DISM to export
+                $result = & dism /export-image /sourceimagefile:$esd /sourceindex:1 /destinationimagefile:$wim /compress:max /checkintegrity 2>&1
+                $exitCode = $LASTEXITCODE
+                
+                Write-Host "DISM export result:"
+                $result | ForEach-Object { Write-Host "  $_" }
+                Write-Host "Exit code: $exitCode"
+                
+                if ($exitCode -ne 0) {
+                    Write-Host "LỖI: Cả hai phương pháp chuyển đổi đều thất bại!" -ForegroundColor Red
+                    exit 1
+                }
+            }
+            
+            Write-Host "Đã chuyển đổi install.esd thành install.wim thành công!"
+        } catch {
+            Write-Host "LỖI: Không thể chuyển đổi install.esd! $_" -ForegroundColor Red
+            exit 1
+        }
+    } else {
+        Write-Host "LỖI: Không tìm thấy install.wim hoặc install.esd tại: $wim" -ForegroundColor Red
+        Write-Host "Các file trong sources:" -ForegroundColor Yellow
+        if (Test-Path (Join-Path $dest "sources")) {
+            Get-ChildItem (Join-Path $dest "sources") | ForEach-Object { Write-Host "  $($_.Name)" }
+        }
+        exit 1
     }
-    exit 1
 }
 
 Write-Host "Tìm thấy install.wim: $wim"
 
-# 3. Mount install.wim
+# 3. Get WIM information and count images
+Write-Host "=== LẤY THÔNG TIN WIM ==="
+try {
+    $wimInfo = & dism /get-wiminfo /wimfile:$wim 2>&1
+    $exitCode = $LASTEXITCODE
+    
+    Write-Host "DISM get-wiminfo result:"
+    $wimInfo | ForEach-Object { Write-Host "  $_" }
+    Write-Host "Exit code: $exitCode"
+    
+    if ($exitCode -ne 0) {
+        Write-Host "LỖI: Không thể lấy thông tin WIM!" -ForegroundColor Red
+        exit 1
+    }
+    
+    # Count images using correct pattern
+    $imageCount = ($wimInfo | Select-String "Index:").Count
+    Write-Host "Số lượng images trong WIM: $imageCount"
+    
+    if ($imageCount -eq 0) {
+        Write-Host "LỖI: Không tìm thấy images nào trong WIM!" -ForegroundColor Red
+        exit 1
+    }
+    
+    # Show all available editions
+    Write-Host "=== CÁC EDITIONS CÓ SẴN ==="
+    $wimInfo | Select-String "Index:" | ForEach-Object {
+        $line = $_.Line
+        $index = [regex]::Match($line, "Index:\s*(\d+)").Groups[1].Value
+        $name = [regex]::Match($line, "Name:\s*(.+)").Groups[1].Value
+        Write-Host "  Index $index`: $name"
+    }
+    
+} catch {
+    Write-Host "LỖI: Không thể lấy thông tin WIM! $_" -ForegroundColor Red
+    exit 1
+}
+
+# 4. Mount install.wim
 $mountdir = "$env:SystemDrive\WIDTemp\mountdir"
 if (Test-Path $mountdir) { 
     Write-Host "Xóa thư mục mount cũ: $mountdir"
@@ -188,11 +271,12 @@ $imageIndex = 1
 if ($winEdition) {
     Write-Host "Tìm Windows edition: $winEdition"
     try {
-        $info = dism /get-wiminfo /wimfile:$wim | Out-String
-        $match = $info -split "`n" | Where-Object { $_ -match "Name\s*:\s*$winEdition" }
+        $match = $wimInfo | Select-String "Index:" | Where-Object { $_ -match $winEdition }
         if ($match) {
-            $imageIndex = [regex]::Match($match, "Index\s*:\s*(\d+)").Groups[1].Value
+            $imageIndex = [regex]::Match($match.Line, "Index:\s*(\d+)").Groups[1].Value
             Write-Host "Tìm thấy edition tại index: $imageIndex"
+        } else {
+            Write-Host "Không tìm thấy edition '$winEdition', sử dụng index 1" -ForegroundColor Yellow
         }
     } catch {
         Write-Host "Không tìm thấy edition, sử dụng index 1" -ForegroundColor Yellow
@@ -201,14 +285,42 @@ if ($winEdition) {
 
 Write-Host "Mount WIM image index $imageIndex..."
 try {
-    Mount-WindowsImage -ImagePath $wim -Index $imageIndex -Path $mountdir -ErrorAction Stop
+    $mountResult = & dism /mount-wim /wimfile:$wim /index:$imageIndex /mountdir:$mountdir 2>&1
+    $exitCode = $LASTEXITCODE
+    
+    Write-Host "DISM mount result:"
+    $mountResult | ForEach-Object { Write-Host "  $_" }
+    Write-Host "Exit code: $exitCode"
+    
+    if ($exitCode -ne 0) {
+        Write-Host "LỖI: Không mount được WIM!" -ForegroundColor Red
+        exit 1
+    }
+    
     Write-Host "=== ĐÃ MOUNT WIM THÀNH CÔNG ==="
+    
+    # Debug: Check mount directory
+    Write-Host "=== DEBUG: Kiểm tra thư mục mount ==="
+    Write-Host "Mount directory: $mountdir"
+    Write-Host "Mount directory exists: $(Test-Path $mountdir)"
+    
+    if (Test-Path $mountdir) {
+        Write-Host "Files in mount directory:"
+        Get-ChildItem $mountdir | ForEach-Object { Write-Host "  $($_.Name)" }
+        
+        if (Test-Path (Join-Path $mountdir "Windows")) {
+            Write-Host "Windows directory exists"
+        } else {
+            Write-Host "Windows directory does not exist!"
+        }
+    }
+    
 } catch {
     Write-Host "LỖI: Không mount được WIM! $_" -ForegroundColor Red
     exit 1
 }
 
-# 4. Debloat: Remove AppX, Capabilities, Features, OneDrive, Edge, etc.
+# 5. Debloat: Remove AppX, Capabilities, Features, OneDrive, Edge, etc.
 $appx = @(
     "Microsoft.BingNews*", "Microsoft.BingWeather*", "Microsoft.549981C3F5F10*", "Microsoft.WindowsAlarms*",
     "Microsoft.WindowsFeedbackHub*", "Microsoft.GetHelp*", "Microsoft.Getstarted*", "Microsoft.WindowsMaps*",
@@ -222,8 +334,14 @@ Write-Host "Xóa AppX packages..."
 foreach ($pattern in $appx) {
     Write-Host "  Đang xóa AppX: $pattern"
     try {
-        Get-ProvisionedAppxPackage -Path $mountdir | Where-Object { $_.PackageName -like $pattern } | ForEach-Object {
-            Remove-ProvisionedAppxPackage -Path $mountdir -PackageName $_.PackageName -ErrorAction SilentlyContinue
+        $appxResult = & dism /image:$mountdir /get-provisionedappxpackages 2>&1
+        $appxPackages = $appxResult | Select-String $pattern.Replace("*", "")
+        
+        foreach ($package in $appxPackages) {
+            $packageName = $package.Line.Trim()
+            Write-Host "    Removing: $packageName"
+            $removeResult = & dism /image:$mountdir /remove-provisionedappxpackage /packagename:$packageName 2>&1
+            Write-Host "    Remove result: $($removeResult -join ' ')"
         }
     } catch {
         Write-Host "    Cảnh báo: Không thể xóa $pattern" -ForegroundColor Yellow
@@ -235,6 +353,7 @@ Write-Host "Xóa OneDrive..."
 try {
     Remove-Item "$mountdir\Windows\System32\OneDriveSetup.exe" -Force -ErrorAction SilentlyContinue
     Remove-Item "$mountdir\Windows\SysWOW64\OneDriveSetup.exe" -Force -ErrorAction SilentlyContinue
+    Write-Host "  OneDrive files removed"
 } catch {
     Write-Host "  Cảnh báo: Không thể xóa OneDrive" -ForegroundColor Yellow
 }
@@ -244,6 +363,7 @@ Write-Host "Xóa Edge..."
 try {
     Remove-Item "$mountdir\Program Files\Microsoft\Edge*" -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item "$mountdir\Program Files (x86)\Microsoft\Edge*" -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "  Edge directories removed"
 } catch {
     Write-Host "  Cảnh báo: Không thể xóa Edge" -ForegroundColor Yellow
 }
@@ -257,8 +377,14 @@ $capabilities = @(
 foreach ($cap in $capabilities) {
     Write-Host "  Đang xóa Capability: $cap"
     try {
-        Get-WindowsCapability -Path $mountdir | Where-Object { $_.Name -like $cap } | ForEach-Object {
-            Remove-WindowsCapability -Path $mountdir -Name $_.Name -ErrorAction SilentlyContinue
+        $capResult = & dism /image:$mountdir /get-capabilities 2>&1
+        $capPackages = $capResult | Select-String $cap.Replace("*", "")
+        
+        foreach ($package in $capPackages) {
+            $capName = $package.Line.Trim()
+            Write-Host "    Removing capability: $capName"
+            $removeResult = & dism /image:$mountdir /remove-capability /capabilityname:$capName 2>&1
+            Write-Host "    Remove result: $($removeResult -join ' ')"
         }
     } catch {
         Write-Host "    Cảnh báo: Không thể xóa $cap" -ForegroundColor Yellow
@@ -277,8 +403,14 @@ $features = @(
 foreach ($pkg in $features) {
     Write-Host "  Đang xóa Feature: $pkg"
     try {
-        Get-WindowsPackage -Path $mountdir | Where-Object { $_.PackageName -like $pkg } | ForEach-Object {
-            Remove-WindowsPackage -Path $mountdir -PackageName $_.PackageName -ErrorAction SilentlyContinue
+        $pkgResult = & dism /image:$mountdir /get-packages 2>&1
+        $pkgPackages = $pkgResult | Select-String $pkg.Replace("*", "")
+        
+        foreach ($package in $pkgPackages) {
+            $pkgName = $package.Line.Trim()
+            Write-Host "    Removing package: $pkgName"
+            $removeResult = & dism /image:$mountdir /remove-package /packagename:$pkgName 2>&1
+            Write-Host "    Remove result: $($removeResult -join ' ')"
         }
     } catch {
         Write-Host "    Cảnh báo: Không thể xóa $pkg" -ForegroundColor Yellow
@@ -287,7 +419,7 @@ foreach ($pkg in $features) {
 
 Write-Host "=== ĐÃ DEBLOAT XONG, BẮT ĐẦU PATCH REGISTRY ==="
 
-# 5. Registry Tweaks (ví dụ: tắt Telemetry, quảng cáo, bypass TPM...)
+# 6. Registry Tweaks (ví dụ: tắt Telemetry, quảng cáo, bypass TPM...)
 Write-Host "Patch Registry..."
 try {
     reg load HKLM\zSYSTEM "$mountdir\Windows\System32\config\SYSTEM"
@@ -301,15 +433,153 @@ try {
 
 Write-Host "=== UNMOUNT WIM ==="
 
-# 6. Unmount & commit
+# 7. Unmount & commit
 try {
-    Dismount-WindowsImage -Path $mountdir -Save -ErrorAction Stop
+    $unmountResult = & dism /unmount-wim /mountdir:$mountdir /commit 2>&1
+    $exitCode = $LASTEXITCODE
+    
+    Write-Host "DISM unmount result:"
+    $unmountResult | ForEach-Object { Write-Host "  $_" }
+    Write-Host "Exit code: $exitCode"
+    
+    if ($exitCode -ne 0) {
+        Write-Host "LỖI: Không thể unmount WIM!" -ForegroundColor Red
+        exit 1
+    }
+    
     Write-Host "=== ĐÃ UNMOUNT WIM THÀNH CÔNG ==="
 } catch {
     Write-Host "LỖI: Không thể unmount WIM! $_" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "=== ĐÃ HOÀN THÀNH DEBLOAT ==="
-Write-Host "Debloat hoàn tất! File WIM đã được cập nhật tại: $wim"
-Write-Host "Bạn có thể tạo lại ISO từ thư mục: $dest" 
+Write-Host "=== BẮT ĐẦU TẠO LẠI ISO ==="
+
+# 8. Change ownership to avoid permission issues
+Write-Host "Thay đổi quyền sở hữu thư mục để tránh lỗi permission..."
+try {
+    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    Write-Host "Current user: $currentUser"
+    
+    $acl = Get-Acl $dest
+    $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($currentUser, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+    $acl.SetAccessRule($accessRule)
+    Set-Acl $dest $acl
+    
+    Write-Host "Đã thay đổi quyền sở hữu thành công"
+} catch {
+    Write-Host "Cảnh báo: Không thể thay đổi quyền sở hữu: $_" -ForegroundColor Yellow
+}
+
+# 9. Create new ISO using oscdimg
+Write-Host "Tạo ISO mới bằng oscdimg..."
+try {
+    # Check if oscdimg is available
+    $oscdimgPath = "oscdimg"
+    $testResult = & $oscdimgPath 2>&1
+    if ($LASTEXITCODE -eq 0 -or $testResult -match "Usage") {
+        Write-Host "oscdimg is available"
+        
+        # Create ISO with proper boot settings
+        $isoResult = & $oscdimg -m -o -u2 -udfver102 -bootdata:2#p0,e,b"$dest\boot\etfsboot.com"#pEF,e,b"$dest\efi\microsoft\boot\efisys.bin" $dest $outputISO 2>&1
+        $exitCode = $LASTEXITCODE
+        
+        Write-Host "oscdimg result:"
+        $isoResult | ForEach-Object { Write-Host "  $_" }
+        Write-Host "Exit code: $exitCode"
+        
+        if ($exitCode -eq 0) {
+            Write-Host "=== TẠO ISO THÀNH CÔNG ==="
+        } else {
+            Write-Host "oscdimg failed, trying alternative method..." -ForegroundColor Yellow
+            throw "oscdimg failed"
+        }
+    } else {
+        Write-Host "oscdimg not available, trying alternative method..." -ForegroundColor Yellow
+        throw "oscdimg not available"
+    }
+} catch {
+    Write-Host "Trying alternative ISO creation method..." -ForegroundColor Yellow
+    
+    # Alternative: Use PowerShell to create ISO (Windows 10/11 built-in)
+    try {
+        Write-Host "Using PowerShell New-IsoFile..."
+        
+        # Check if New-IsoFile function exists
+        if (Get-Command New-IsoFile -ErrorAction SilentlyContinue) {
+            New-IsoFile -Source $dest -Path $outputISO -BootFile "$dest\boot\etfsboot.com" -Media DVDROM -Title "Windows Debloated"
+            Write-Host "=== TẠO ISO THÀNH CÔNG VỚI POWERSHELL ==="
+        } else {
+            Write-Host "New-IsoFile not available, trying manual method..." -ForegroundColor Yellow
+            
+            # Manual method: Use 7-Zip if available
+            $sevenZipPath = "7z"
+            $testResult = & $sevenZipPath 2>&1
+            if ($LASTEXITCODE -eq 0 -or $testResult -match "Usage") {
+                Write-Host "7-Zip is available, creating ISO..."
+                
+                # Create temporary directory structure
+                $tempDir = "$env:TEMP\iso_temp"
+                if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+                New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+                
+                # Copy files to temp directory
+                robocopy $dest $tempDir /E /COPY:DAT
+                
+                # Create ISO with 7-Zip
+                $isoResult = & $sevenZipPath a -tiso $outputISO "$tempDir\*" 2>&1
+                $exitCode = $LASTEXITCODE
+                
+                Write-Host "7-Zip ISO creation result:"
+                $isoResult | ForEach-Object { Write-Host "  $_" }
+                Write-Host "Exit code: $exitCode"
+                
+                # Clean up temp directory
+                Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+                
+                if ($exitCode -eq 0) {
+                    Write-Host "=== TẠO ISO THÀNH CÔNG VỚI 7-ZIP ==="
+                } else {
+                    Write-Host "LỖI: Không thể tạo ISO với bất kỳ phương pháp nào!" -ForegroundColor Red
+                    exit 1
+                }
+            } else {
+                Write-Host "LỖI: Không có công cụ nào để tạo ISO!" -ForegroundColor Red
+                Write-Host "Các file đã được debloat tại: $dest" -ForegroundColor Yellow
+                Write-Host "Bạn có thể tạo ISO thủ công từ thư mục này" -ForegroundColor Yellow
+                exit 1
+            }
+        }
+    } catch {
+        Write-Host "LỖI: Không thể tạo ISO! $_" -ForegroundColor Red
+        Write-Host "Các file đã được debloat tại: $dest" -ForegroundColor Yellow
+        Write-Host "Bạn có thể tạo ISO thủ công từ thư mục này" -ForegroundColor Yellow
+        exit 1
+    }
+}
+
+# 10. Verify output ISO
+if (Test-Path $outputISO) {
+    $outputSize = (Get-Item $outputISO).Length / 1GB
+    Write-Host "=== HOÀN THÀNH ==="
+    Write-Host "ISO đã được tạo thành công: $outputISO"
+    Write-Host "Kích thước: $([math]::Round($outputSize,2)) GB"
+    Write-Host "Debloat hoàn tất!"
+} else {
+    Write-Host "LỖI: Không tìm thấy file ISO output!" -ForegroundColor Red
+    Write-Host "Các file đã được debloat tại: $dest" -ForegroundColor Yellow
+    exit 1
+}
+
+# 11. Cleanup
+Write-Host "Dọn dẹp thư mục tạm..."
+try {
+    Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $mountdir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "Đã dọn dẹp xong"
+} catch {
+    Write-Host "Cảnh báo: Không thể dọn dẹp thư mục tạm: $_" -ForegroundColor Yellow
+}
+
+Write-Host "=== DEBLOAT HOÀN TẤT ==="
+Write-Host "File ISO đã được debloat: $outputISO" 
