@@ -78,55 +78,13 @@ jobs:
               echo "ISO_PATH=windows.iso" | Out-File -FilePath $env:GITHUB_ENV -Append
           }
 
-      - name: Debug File Structure
-        shell: pwsh
-        run: |
-          Write-Host "=== DEBUG FILE STRUCTURE ==="
-          Write-Host "Current directory: $(Get-Location)"
-          Write-Host "Current directory contents:"
-          Get-ChildItem | ForEach-Object { 
-              $type = if ($_.PSIsContainer) { "Directory" } else { "File" }
-              Write-Host "  $($_.Name) - $type" 
-          }
-          
-          Write-Host "Scripts directory exists: $(Test-Path 'scripts')"
-          if (Test-Path "scripts") {
-              Write-Host "Scripts directory contents:"
-              Get-ChildItem "scripts" | ForEach-Object { 
-                  $type = if ($_.PSIsContainer) { "Directory" } else { "File" }
-                  Write-Host "  $($_.Name) - $type" 
-              }
-          }
-          
-          Write-Host "Script file exists: $(Test-Path '.\scripts\debloat-windows-iso.ps1')"
-
-      - name: Test PowerShell Script
-        shell: pwsh
-        run: |
-          Write-Host "=== TESTING POWERSHELL SCRIPT ==="
-          $scriptPath = ".\scripts\debloat-windows-iso.ps1"
-          
-          Write-Host "Script path: $scriptPath"
-          Write-Host "Script exists: $(Test-Path $scriptPath)"
-          
-          if (Test-Path $scriptPath) {
-              Write-Host "Script file size: $((Get-Item $scriptPath).Length) bytes"
-              Write-Host "Script last modified: $(Get-Item $scriptPath).LastWriteTime"
-              Write-Host "Script test passed!"
-          } else {
-              Write-Host "LỖI: Script không tồn tại!" -ForegroundColor Red
-              exit 1
-          }
-
       - name: Debloat ISO (PowerShell)
         shell: pwsh
         run: |
-          Write-Host "=== DEBUG: Current directory ==="
-          Get-Location
-          Write-Host "=== DEBUG: Files in current directory ==="
-          Get-ChildItem
-          Write-Host "=== DEBUG: ISO_PATH environment variable ==="
-          Write-Host "ISO_PATH = $env:ISO_PATH"
+          Write-Host "=== BẮT ĐẦU DEBLOAT ==="
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "Files in current directory:"
+          Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name)" }
           
           $iso = "$env:ISO_PATH"
           if (-not $iso) {
@@ -153,7 +111,6 @@ jobs:
           }
           
           $output = "debloated-windows.iso"
-          Write-Host "=== BẮT ĐẦU DEBLOAT ==="
           Write-Host "Input ISO: $iso"
           Write-Host "Output ISO: $output"
           
