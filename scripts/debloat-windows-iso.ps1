@@ -77,6 +77,23 @@ try {
     Write-Host "Unmount ISO..."
     Dismount-DiskImage -ImagePath $isoPath
     Write-Host "=== ĐÃ COPY XONG ISO ==="
+    
+    # Debug: Check what was copied
+    Write-Host "=== DEBUG: Kiểm tra nội dung đã copy ==="
+    Write-Host "Destination directory: $dest"
+    Write-Host "Destination exists: $(Test-Path $dest)"
+    
+    if (Test-Path $dest) {
+        Write-Host "Files in destination:"
+        Get-ChildItem $dest | ForEach-Object { Write-Host "  $($_.Name)" }
+        
+        if (Test-Path (Join-Path $dest "sources")) {
+            Write-Host "Files in sources directory:"
+            Get-ChildItem (Join-Path $dest "sources") | ForEach-Object { Write-Host "  $($_.Name)" }
+        } else {
+            Write-Host "Sources directory does not exist!"
+        }
+    }
 } catch {
     Write-Host "LỖI: Không mount được ISO! $_" -ForegroundColor Red
     Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
