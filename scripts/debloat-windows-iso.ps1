@@ -8,9 +8,37 @@ param(
     [string]$outputISO = ""
 )
 
+Write-Host "=== DEBUG: Script Parameters ==="
+Write-Host "isoPath: '$isoPath'"
+Write-Host "winEdition: '$winEdition'"
+Write-Host "outputISO: '$outputISO'"
+
+# Check if running as Administrator
+if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Write-Host "LỖI: Script này cần chạy với quyền Administrator!" -ForegroundColor Red
+    exit 1
+}
+
+# If no isoPath provided, try to find windows.iso in current directory
+if (-not $isoPath) {
+    Write-Host "Không có isoPath được cung cấp, tìm file windows.iso trong thư mục hiện tại..."
+    if (Test-Path "windows.iso") {
+        $isoPath = "windows.iso"
+        Write-Host "Đã tìm thấy windows.iso"
+    } else {
+        Write-Host "LỖI: Không tìm thấy file ISO và không có isoPath được cung cấp!" -ForegroundColor Red
+        Write-Host "Các file trong thư mục hiện tại:" -ForegroundColor Yellow
+        Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name)" }
+        exit 1
+    }
+}
+
 Write-Host "=== BẮT ĐẦU MOUNT ISO ==="
 if (!(Test-Path $isoPath)) {
     Write-Host "LỖI: Không tìm thấy file ISO $isoPath" -ForegroundColor Red
+    Write-Host "Thư mục hiện tại: $(Get-Location)" -ForegroundColor Yellow
+    Write-Host "Các file trong thư mục:" -ForegroundColor Yellow
+    Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name)" }
     exit 1
 }
 $size = (Get-Item $isoPath).Length / 1GB

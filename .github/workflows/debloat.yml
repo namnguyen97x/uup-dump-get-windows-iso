@@ -61,12 +61,30 @@ jobs:
       - name: Debloat ISO (PowerShell)
         shell: pwsh
         run: |
-          $iso = "${{ env.ISO_PATH }}"
+          Write-Host "=== DEBUG: Current directory ==="
+          Get-Location
+          Write-Host "=== DEBUG: Files in current directory ==="
+          Get-ChildItem
+          Write-Host "=== DEBUG: ISO_PATH environment variable ==="
+          Write-Host "ISO_PATH = $env:ISO_PATH"
+          
+          $iso = "$env:ISO_PATH"
+          if (-not $iso) {
+              Write-Host "LỖI: ISO_PATH environment variable không được set!" -ForegroundColor Red
+              exit 1
+          }
+          
+          if (-not (Test-Path $iso)) {
+              Write-Host "LỖI: Không tìm thấy file ISO: $iso" -ForegroundColor Red
+              exit 1
+          }
+          
           $output = "debloated-windows.iso"
-          $params = @()
-          if ($iso) { $params += "-isoPath `"$iso`"" }
-          $params += "-outputISO `"$output`""
-          pwsh scripts/debloat-windows-iso.ps1 @params
+          Write-Host "=== BẮT ĐẦU DEBLOAT ==="
+          Write-Host "Input ISO: $iso"
+          Write-Host "Output ISO: $output"
+          
+          & ".\scripts\debloat-windows-iso.ps1" -isoPath $iso -outputISO $output
 
       - name: Upload debloated ISO
         uses: actions/upload-artifact@v4
