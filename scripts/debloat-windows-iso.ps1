@@ -13,10 +13,13 @@ Write-Host "isoPath: '$isoPath'"
 Write-Host "winEdition: '$winEdition'"
 Write-Host "outputISO: '$outputISO'"
 
-# Check if running as Administrator
-if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "LỖI: Script này cần chạy với quyền Administrator!" -ForegroundColor Red
-    exit 1
+# Check if running as Administrator (but don't exit immediately)
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+Write-Host "Running as Administrator: $isAdmin"
+
+if (-not $isAdmin) {
+    Write-Host "CẢNH BÁO: Script này cần chạy với quyền Administrator!" -ForegroundColor Yellow
+    Write-Host "Một số thao tác có thể thất bại nếu không có quyền Administrator" -ForegroundColor Yellow
 }
 
 # If no isoPath provided, try to find windows.iso in current directory

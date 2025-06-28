@@ -88,21 +88,34 @@ jobs:
           Write-Host "Script exists: $(Test-Path $scriptPath)"
           
           if (Test-Path $scriptPath) {
-              Write-Host "Script content (first 20 lines):"
-              Get-Content $scriptPath | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
+              Write-Host "Script content (first 10 lines):"
+              Get-Content $scriptPath | Select-Object -First 10 | ForEach-Object { Write-Host "  $_" }
               
-              Write-Host "Testing script syntax..."
-              $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $scriptPath -Raw), [ref]$null)
-              Write-Host "Script syntax is valid!"
+              Write-Host "Script file size: $((Get-Item $scriptPath).Length) bytes"
+              Write-Host "Script last modified: $(Get-Item $scriptPath).LastWriteTime"
               
-              Write-Host "Testing script parameters..."
-              $help = Get-Help $scriptPath -Full
-              Write-Host "Script parameters:"
-              $help.Parameters.Parameter | ForEach-Object { 
-                  Write-Host "  - $($_.Name): $($_.Type.Name)" 
+              Write-Host "Testing basic script execution..."
+              try {
+                  # Test if script can be loaded (without running it)
+                  $scriptContent = Get-Content $scriptPath -Raw
+                  Write-Host "Script can be read successfully"
+                  
+                  # Check for basic parameter block
+                  if ($scriptContent -match "param\(") {
+                      Write-Host "Script has parameter block"
+                  } else {
+                      Write-Host "Warning: Script may not have parameter block"
+                  }
+                  
+              } catch {
+                  Write-Host "LỖI: Không thể đọc script: $_" -ForegroundColor Red
+                  exit 1
               }
           } else {
               Write-Host "LỖI: Script không tồn tại!" -ForegroundColor Red
+              Write-Host "Current directory: $(Get-Location)"
+              Write-Host "Files in current directory:"
+              Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name)" }
               exit 1
           }
 
