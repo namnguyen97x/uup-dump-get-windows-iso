@@ -285,24 +285,11 @@ jobs:
             & dism /cleanup-wim 2>$null
             & dism /cleanup-mountpoints 2>$null
             
-            # Try to provide fallback if main Windows Lite processing failed
-            Write-Host "🔄 Attempting basic fallback processing..." -ForegroundColor Yellow
-            
-            if (Test-Path "scripts/robust-debloat.ps1") {
-                try {
-                    & "scripts/robust-debloat.ps1" @windowsLiteParams
-                    if (Test-Path "windows-lite.iso") {
-                        Write-Host "✅ Fallback processing succeeded" -ForegroundColor Green
-                    } else {
-                        throw "Fallback processing also failed"
-                    }
-                } catch {
-                    Write-Host "❌ Fallback processing also failed: $($_.Exception.Message)" -ForegroundColor Red
-                    throw "Both Windows Lite processing and fallback failed"
-                }
-            } else {
-                throw
-            }
+            # Exit with error - don't fallback to old ineffective script
+            Write-Host "❌ Windows Lite processing is the only supported method" -ForegroundColor Red
+            Write-Host "The old robust-debloat.ps1 script only achieves 1-2% reduction and is ineffective" -ForegroundColor Red
+            Write-Host "Please check the Windows Lite processing script for issues" -ForegroundColor Red
+            throw
         }
       
     - name: 📊 Windows Lite Processing Results
