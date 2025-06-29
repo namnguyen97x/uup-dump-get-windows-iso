@@ -202,12 +202,34 @@ jobs:
               }
           }
           
+          # Test script syntax first
+          Write-Host "=== TESTING SCRIPT SYNTAX ==="
+          $scriptPath = ".\scripts\debloat-windows-iso.ps1"
+          Write-Host "Script path: $scriptPath"
+          Write-Host "Script exists: $(Test-Path $scriptPath)"
+          
+          if (-not (Test-Path $scriptPath)) {
+              Write-Host "LỖI: Script không tồn tại tại: $scriptPath" -ForegroundColor Red
+              Write-Host "Available files in scripts directory:"
+              Get-ChildItem ".\scripts\" | ForEach-Object { Write-Host "  $($_.Name)" }
+              exit 1
+          }
+          
+          # Test with simple script first
+          Write-Host "Testing PowerShell execution with test script..."
+          $testResult = powershell.exe -ExecutionPolicy Bypass -File .\scripts\test-script.ps1 -isoPath $iso -outputISO $output $(if ($testMode) { '-testMode' } else { '' }) 2>&1
+          $testExitCode = $LASTEXITCODE
+          Write-Host "Test script result (exit code $testExitCode):"
+          $testResult | ForEach-Object { Write-Host "  $_" }
+          
+          if ($testExitCode -ne 0) {
+              Write-Host "Test script failed! Something is wrong with PowerShell execution" -ForegroundColor Red
+              exit 1
+          }
+          
           # Run script with detailed error handling
           try {
-              Write-Host "Executing PowerShell script..."
-              $scriptPath = ".\scripts\debloat-windows-iso.ps1"
-              Write-Host "Script path: $scriptPath"
-              Write-Host "Script exists: $(Test-Path $scriptPath)"
+              Write-Host "=== EXECUTING SCRIPT ==="
               
               if (-not (Test-Path $scriptPath)) {
                   Write-Host "LỖI: Script không tồn tại tại: $scriptPath" -ForegroundColor Red
@@ -237,7 +259,12 @@ jobs:
           Write-Host "Setting timeout to $timeout seconds"
           
           $startTime = Get-Date
-          $result = & $scriptPath @scriptArgs 2>&1
+          Write-Host "Starting script execution at: $startTime"
+          
+          # Execute with verbose output and error capturing
+          Write-Host "Command: powershell.exe -ExecutionPolicy Bypass -File '$scriptPath' -isoPath '$($scriptArgs.isoPath)' -outputISO '$($scriptArgs.outputISO)' $(if ($scriptArgs.testMode) { '-testMode' })"
+          
+          $result = powershell.exe -ExecutionPolicy Bypass -File $scriptPath -isoPath $scriptArgs.isoPath -outputISO $scriptArgs.outputISO $(if ($scriptArgs.testMode) { '-testMode' } else { '' }) 2>&1
           $exitCode = $LASTEXITCODE
           $endTime = Get-Date
           $duration = $endTime - $startTime

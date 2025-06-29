@@ -9,8 +9,16 @@ param(
     [switch]$testMode = $false
 )
 
-# Main script execution wrapped in try-catch for better error handling
-try {
+Write-Host "=== SCRIPT STARTED ==="
+Write-Host "Script path: $($MyInvocation.MyCommand.Path)"
+Write-Host "Working directory: $(Get-Location)"
+Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
+Write-Host "Execution policy: $(Get-ExecutionPolicy)"
+
+# Force output flushing
+$Host.UI.RawUI.FlushInputBuffer()
+[System.Console]::Out.Flush()
+[System.Console]::Error.Flush()
 
 Write-Host "=== DEBUG: Script Parameters ==="
 Write-Host "isoPath: '$isoPath'"
@@ -174,6 +182,11 @@ try {
     }
 }
 
+Write-Host "=== CHECKPOINT 1: ISO COPY COMPLETED ==="
+Write-Host "Next step: Check install.wim/install.esd"
+[System.Console]::Out.Flush()
+[System.Console]::Error.Flush()
+
 # 2. Check for install.wim or install.esd
 Write-Host "=== KIỂM TRA INSTALL.WIM/INSTALL.ESD ==="
 Write-Host "Destination directory: $dest"
@@ -187,6 +200,7 @@ if (Test-Path $dest) {
     }
 } else {
     Write-Host "ERROR: Destination directory does not exist!" -ForegroundColor Red
+    Write-Host "=== SCRIPT TERMINATING: DESTINATION NOT FOUND ==="
     exit 1
 }
 
@@ -201,6 +215,7 @@ if (Test-Path $sourcesDir) {
     }
 } else {
     Write-Host "ERROR: Sources directory does not exist!" -ForegroundColor Red
+    Write-Host "=== SCRIPT TERMINATING: SOURCES DIR NOT FOUND ==="
     exit 1
 }
 
@@ -276,12 +291,18 @@ if (-not (Test-Path $wim)) {
         }
         
         Write-Host "LỖI: Không thể tiếp tục debloat mà không có install.wim/install.esd" -ForegroundColor Red
+        Write-Host "=== SCRIPT TERMINATING: NO WIM/ESD FOUND ==="
         exit 1
     }
 }
 
 Write-Host "Tìm thấy install.wim: $wim"
 Write-Host "install.wim file size: $((Get-Item $wim).Length / 1GB) GB"
+
+Write-Host "=== CHECKPOINT 2: WIM FILE FOUND ==="
+Write-Host "Next step: Get WIM information"
+[System.Console]::Out.Flush()
+[System.Console]::Error.Flush()
 
 # 3. Get WIM information and count images
 Write-Host "=== LẤY THÔNG TIN WIM ==="
@@ -297,6 +318,7 @@ try {
     if ($dismExitCode -ne 0) {
         Write-Host "ERROR: DISM is not available or not working properly" -ForegroundColor Red
         Write-Host "DISM test output: $($dismTest -join ' ')" -ForegroundColor Yellow
+        Write-Host "=== SCRIPT TERMINATING: DISM NOT AVAILABLE ==="
         exit 1
     }
     
@@ -314,6 +336,7 @@ try {
         Write-Host "  - Corrupted WIM file" -ForegroundColor Red
         Write-Host "  - Insufficient permissions" -ForegroundColor Red
         Write-Host "  - WIM file is locked by another process" -ForegroundColor Red
+        Write-Host "=== SCRIPT TERMINATING: DISM GET-WIMINFO FAILED ==="
         exit 1
     }
     
@@ -353,6 +376,12 @@ if ($testMode) {
     Write-Host "WIM file is valid and contains $imageCount images" -ForegroundColor Green
     exit 0
 }
+
+Write-Host "=== CHECKPOINT 3: WIM INFO COMPLETED ==="
+Write-Host "Found $imageCount images in WIM"
+Write-Host "Next step: Mount WIM for debloating"
+[System.Console]::Out.Flush()
+[System.Console]::Error.Flush()
 
 # 4. Mount install.wim
 Write-Host "=== MOUNT WIM ==="
@@ -736,25 +765,5 @@ Write-Host "File ISO đã được debloat: $outputISO"
     }
 }
 
-# End of main try block
-} catch {
-    Write-Host "=== CRITICAL ERROR ===" -ForegroundColor Red
-    Write-Host "Script failed with unexpected error: $_" -ForegroundColor Red
-    Write-Host "Error type: $($_.Exception.GetType().Name)" -ForegroundColor Red
-    Write-Host "Error message: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Stack trace:" -ForegroundColor Red
-    Write-Host "$($_.ScriptStackTrace)" -ForegroundColor Red
-    Write-Host "Line: $($_.InvocationInfo.ScriptLineNumber)" -ForegroundColor Red
-    Write-Host "Position: $($_.InvocationInfo.PositionMessage)" -ForegroundColor Red
-    
-    # Flush output and wait a moment before exiting
-    [System.Console]::Out.Flush()
-    [System.Console]::Error.Flush()
-    Start-Sleep -Seconds 1
-    
-    exit 1
-}
-
-# Final output flush
-[System.Console]::Out.Flush()
-Write-Host "Script completed successfully" 
+Write-Host "=== SCRIPT FINISHED NORMALLY ==="
+Write-Host "All operations completed successfully" 
