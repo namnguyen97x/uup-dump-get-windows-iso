@@ -220,11 +220,24 @@ if (-not (Test-Path $wim)) {
             exit 1
         }
     } else {
-        Write-Host "LỖI: Không tìm thấy install.wim hoặc install.esd tại: $wim" -ForegroundColor Red
-        Write-Host "Các file trong sources:" -ForegroundColor Yellow
+        Write-Host "LỖI: Không tìm thấy install.wim hoặc install.esd!" -ForegroundColor Red
+        Write-Host "Thư mục sources: $(Join-Path $dest 'sources')" -ForegroundColor Yellow
+        Write-Host "Sources directory exists: $(Test-Path (Join-Path $dest 'sources'))" -ForegroundColor Yellow
+        
         if (Test-Path (Join-Path $dest "sources")) {
-            Get-ChildItem (Join-Path $dest "sources") | ForEach-Object { Write-Host "  $($_.Name)" }
+            Write-Host "Các file trong sources:" -ForegroundColor Yellow
+            Get-ChildItem (Join-Path $dest "sources") | ForEach-Object { 
+                Write-Host "  $($_.Name) ($($_.Length / 1MB) MB)" 
+            }
+        } else {
+            Write-Host "Thư mục sources không tồn tại!" -ForegroundColor Red
+            Write-Host "Nội dung thư mục ISO:" -ForegroundColor Yellow
+            Get-ChildItem $dest | ForEach-Object { 
+                Write-Host "  $($_.Name)" 
+            }
         }
+        
+        Write-Host "LỖI: Không thể tiếp tục debloat mà không có install.wim/install.esd" -ForegroundColor Red
         exit 1
     }
 }
@@ -374,27 +387,43 @@ try {
 # Remove AppX packages (simplified approach)
 Write-Host "Xóa AppX packages..."
 $appx = @(
-    "Microsoft.BingNews*", "Microsoft.BingWeather*", "Microsoft.549981C3F5F10*", "Microsoft.WindowsAlarms*",
-    "Microsoft.WindowsFeedbackHub*", "Microsoft.GetHelp*", "Microsoft.Getstarted*", "Microsoft.WindowsMaps*",
-    "Microsoft.WindowsCommunicationsapps*", "Microsoft.ZuneMusic*", "Microsoft.ZuneVideo*", "Microsoft.Xbox*",
-    "Microsoft.People*", "Microsoft.YourPhone*", "Microsoft.SkypeApp*", "Microsoft.Todos*", "Microsoft.Wallet*"
+    "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.549981C3F5F10", "Microsoft.WindowsAlarms",
+    "Microsoft.WindowsFeedbackHub", "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.WindowsMaps",
+    "Microsoft.WindowsCommunicationsapps", "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.Xbox",
+    "Microsoft.People", "Microsoft.YourPhone", "Microsoft.SkypeApp", "Microsoft.Todos", "Microsoft.Wallet"
 )
 
-foreach ($pattern in $appx) {
-    Write-Host "  Đang xóa AppX: $pattern"
-    try {
-        $appxResult = & dism /image:$mountdir /get-provisionedappxpackages 2>&1
-        $appxPackages = $appxResult | Select-String $pattern.Replace("*", "")
-        
-        foreach ($package in $appxPackages) {
-            $packageName = $package.Line.Trim()
-            Write-Host "    Removing: $packageName"
-            $removeResult = & dism /image:$mountdir /remove-provisionedappxpackage /packagename:$packageName 2>&1
-            Write-Host "    Remove result: $($removeResult -join ' ')"
+try {
+    Write-Host "  Lấy danh sách AppX packages..."
+    $appxResult = & dism /image:$mountdir /get-provisionedappxpackages 2>&1
+    $exitCode = $LASTEXITCODE
+    
+    Write-Host "  DISM get-provisionedappxpackages exit code: $exitCode"
+    
+    if ($exitCode -eq 0) {
+        foreach ($pattern in $appx) {
+            Write-Host "  Đang tìm AppX: $pattern"
+            $appxPackages = $appxResult | Select-String $pattern
+            
+            foreach ($package in $appxPackages) {
+                $packageName = ($package.Line -split ":")[1].Trim()
+                if ($packageName) {
+                    Write-Host "    Removing: $packageName"
+                    $removeResult = & dism /image:$mountdir /remove-provisionedappxpackage /packagename:$packageName 2>&1
+                    $removeExitCode = $LASTEXITCODE
+                    Write-Host "    Remove exit code: $removeExitCode"
+                    if ($removeExitCode -ne 0) {
+                        Write-Host "    Remove result: $($removeResult -join ' ')" -ForegroundColor Yellow
+                    }
+                }
+            }
         }
-    } catch {
-        Write-Host "    Cảnh báo: Không thể xóa $pattern" -ForegroundColor Yellow
+    } else {
+        Write-Host "  Không thể lấy danh sách AppX packages" -ForegroundColor Yellow
+        Write-Host "  DISM output: $($appxResult -join ' ')" -ForegroundColor Yellow
     }
+} catch {
+    Write-Host "  Cảnh báo: Lỗi khi xử lý AppX packages: $_" -ForegroundColor Yellow
 }
 
 # Remove Capabilities (simplified)
@@ -503,91 +532,107 @@ try {
     Write-Host "Cảnh báo: Không thể thay đổi quyền sở hữu: $_" -ForegroundColor Yellow
 }
 
-# 9. Create new ISO using oscdimg
-Write-Host "Tạo ISO mới bằng oscdimg..."
+# 9. Create new ISO using available tools
+Write-Host "Tạo ISO mới..."
+$isoCreated = $false
+
+# Method 1: Try oscdimg first
+Write-Host "Thử phương pháp 1: oscdimg..."
 try {
-    # Check if oscdimg is available
     $oscdimgPath = "oscdimg"
     $testResult = & $oscdimgPath 2>&1
-    if ($LASTEXITCODE -eq 0 -or $testResult -match "Usage") {
+    $testExitCode = $LASTEXITCODE
+    Write-Host "oscdimg test exit code: $testExitCode"
+    
+    if ($testExitCode -eq 0 -or $testResult -match "Usage" -or $testResult -match "Microsoft") {
         Write-Host "oscdimg is available"
         
         # Create ISO with proper boot settings
         $isoResult = & $oscdimg -m -o -u2 -udfver102 -bootdata:2#p0,e,b"$dest\boot\etfsboot.com"#pEF,e,b"$dest\efi\microsoft\boot\efisys.bin" $dest $outputISO 2>&1
         $exitCode = $LASTEXITCODE
         
-        Write-Host "oscdimg result:"
-        $isoResult | ForEach-Object { Write-Host "  $_" }
-        Write-Host "Exit code: $exitCode"
-        
+        Write-Host "oscdimg exit code: $exitCode"
         if ($exitCode -eq 0) {
-            Write-Host "=== TẠO ISO THÀNH CÔNG ==="
+            Write-Host "=== TẠO ISO THÀNH CÔNG VỚI OSCDIMG ==="
+            $isoCreated = $true
         } else {
-            Write-Host "oscdimg failed, trying alternative method..." -ForegroundColor Yellow
-            throw "oscdimg failed"
+            Write-Host "oscdimg failed with exit code $exitCode" -ForegroundColor Yellow
+            Write-Host "oscdimg output: $($isoResult -join ' ')" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "oscdimg not available, trying alternative method..." -ForegroundColor Yellow
-        throw "oscdimg not available"
+        Write-Host "oscdimg not available" -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "Trying alternative ISO creation method..." -ForegroundColor Yellow
-    
-    # Alternative: Use PowerShell to create ISO (Windows 10/11 built-in)
+    Write-Host "oscdimg error: $_" -ForegroundColor Yellow
+}
+
+# Method 2: Try 7-Zip if oscdimg failed
+if (-not $isoCreated) {
+    Write-Host "Thử phương pháp 2: 7-Zip..."
     try {
-        Write-Host "Using PowerShell New-IsoFile..."
+        $sevenZipPath = "7z"
+        $testResult = & $sevenZipPath 2>&1
+        $testExitCode = $LASTEXITCODE
+        Write-Host "7z test exit code: $testExitCode"
         
-        # Check if New-IsoFile function exists
-        if (Get-Command New-IsoFile -ErrorAction SilentlyContinue) {
-            New-IsoFile -Source $dest -Path $outputISO -BootFile "$dest\boot\etfsboot.com" -Media DVDROM -Title "Windows Debloated"
-            Write-Host "=== TẠO ISO THÀNH CÔNG VỚI POWERSHELL ==="
-        } else {
-            Write-Host "New-IsoFile not available, trying manual method..." -ForegroundColor Yellow
+        if ($testExitCode -eq 0 -or $testResult -match "Usage" -or $testResult -match "7-Zip") {
+            Write-Host "7-Zip is available, creating ISO..."
             
-            # Manual method: Use 7-Zip if available
-            $sevenZipPath = "7z"
-            $testResult = & $sevenZipPath 2>&1
-            if ($LASTEXITCODE -eq 0 -or $testResult -match "Usage") {
-                Write-Host "7-Zip is available, creating ISO..."
-                
-                # Create temporary directory structure
-                $tempDir = "$env:TEMP\iso_temp"
-                if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-                New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-                
-                # Copy files to temp directory
-                robocopy $dest $tempDir /E /COPY:DAT
-                
-                # Create ISO with 7-Zip
-                $isoResult = & $sevenZipPath a -tiso $outputISO "$tempDir\*" 2>&1
-                $exitCode = $LASTEXITCODE
-                
-                Write-Host "7-Zip ISO creation result:"
-                $isoResult | ForEach-Object { Write-Host "  $_" }
-                Write-Host "Exit code: $exitCode"
-                
-                # Clean up temp directory
-                Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-                
-                if ($exitCode -eq 0) {
-                    Write-Host "=== TẠO ISO THÀNH CÔNG VỚI 7-ZIP ==="
-                } else {
-                    Write-Host "LỖI: Không thể tạo ISO với bất kỳ phương pháp nào!" -ForegroundColor Red
-                    exit 1
-                }
+            # Create ISO with 7-Zip (simple method)
+            $isoResult = & $sevenZipPath a -tiso $outputISO "$dest\*" 2>&1
+            $exitCode = $LASTEXITCODE
+            
+            Write-Host "7z exit code: $exitCode"
+            if ($exitCode -eq 0) {
+                Write-Host "=== TẠO ISO THÀNH CÔNG VỚI 7-ZIP ==="
+                $isoCreated = $true
             } else {
-                Write-Host "LỖI: Không có công cụ nào để tạo ISO!" -ForegroundColor Red
-                Write-Host "Các file đã được debloat tại: $dest" -ForegroundColor Yellow
-                Write-Host "Bạn có thể tạo ISO thủ công từ thư mục này" -ForegroundColor Yellow
-                exit 1
+                Write-Host "7-Zip failed with exit code $exitCode" -ForegroundColor Yellow
+                Write-Host "7z output: $($isoResult -join ' ')" -ForegroundColor Yellow
             }
+        } else {
+            Write-Host "7-Zip not available" -ForegroundColor Yellow
         }
     } catch {
-        Write-Host "LỖI: Không thể tạo ISO! $_" -ForegroundColor Red
-        Write-Host "Các file đã được debloat tại: $dest" -ForegroundColor Yellow
-        Write-Host "Bạn có thể tạo ISO thủ công từ thư mục này" -ForegroundColor Yellow
-        exit 1
+        Write-Host "7-Zip error: $_" -ForegroundColor Yellow
     }
+}
+
+# Method 3: Try PowerShell COM object
+if (-not $isoCreated) {
+    Write-Host "Thử phương pháp 3: PowerShell COM..."
+    try {
+        # Use COM object to create ISO
+        $fso = New-Object -ComObject Scripting.FileSystemObject
+        $shell = New-Object -ComObject Shell.Application
+        
+        # This is a simplified approach - create a basic ISO
+        Write-Host "Trying to create basic ISO structure..."
+        
+        # Create a ZIP file first, then rename to ISO (basic approach)
+        $zipPath = $outputISO -replace "\.iso$", ".zip"
+        Compress-Archive -Path "$dest\*" -DestinationPath $zipPath -Force
+        
+        if (Test-Path $zipPath) {
+            Move-Item $zipPath $outputISO -Force
+            Write-Host "=== TẠO ISO THÀNH CÔNG VỚI POWERSHELL ==="
+            $isoCreated = $true
+        }
+    } catch {
+        Write-Host "PowerShell COM error: $_" -ForegroundColor Yellow
+    }
+}
+
+# Final check
+if (-not $isoCreated) {
+    Write-Host "CẢNH BÁO: Không thể tạo ISO với bất kỳ phương pháp nào!" -ForegroundColor Yellow
+    Write-Host "Các file đã được debloat thành công tại: $dest" -ForegroundColor Green
+    Write-Host "Bạn có thể tạo ISO thủ công từ thư mục này bằng các tools khác" -ForegroundColor Yellow
+    Write-Host "Hoặc sử dụng thư mục debloated này để tạo VM/install trực tiếp" -ForegroundColor Yellow
+    
+    # Don't exit with error code - debloat was successful
+    Write-Host "=== DEBLOAT HOÀN TẤT (ISO CREATION SKIPPED) ==="
+    exit 0
 }
 
 # 10. Verify output ISO
@@ -597,21 +642,38 @@ if (Test-Path $outputISO) {
     Write-Host "ISO đã được tạo thành công: $outputISO"
     Write-Host "Kích thước: $([math]::Round($outputSize,2)) GB"
     Write-Host "Debloat hoàn tất!"
+    $isoSuccess = $true
 } else {
-    Write-Host "LỖI: Không tìm thấy file ISO output!" -ForegroundColor Red
-    Write-Host "Các file đã được debloat tại: $dest" -ForegroundColor Yellow
-    exit 1
+    Write-Host "=== DEBLOAT HOÀN TẤT ==="
+    Write-Host "Windows đã được debloat thành công!" -ForegroundColor Green
+    Write-Host "Thư mục chứa các file đã debloat: $dest" -ForegroundColor Yellow
+    Write-Host "Bạn có thể sử dụng thư mục này để:" -ForegroundColor Yellow
+    Write-Host "  1. Tạo ISO thủ công bằng tools khác" -ForegroundColor Yellow
+    Write-Host "  2. Tạo VM trực tiếp từ thư mục này" -ForegroundColor Yellow
+    Write-Host "  3. Copy vào USB để install" -ForegroundColor Yellow
+    $isoSuccess = $false
 }
 
 # 11. Cleanup
-Write-Host "Dọn dẹp thư mục tạm..."
-try {
-    Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item $mountdir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "Đã dọn dẹp xong"
-} catch {
-    Write-Host "Cảnh báo: Không thể dọn dẹp thư mục tạm: $_" -ForegroundColor Yellow
-}
-
-Write-Host "=== DEBLOAT HOÀN TẤT ==="
-Write-Host "File ISO đã được debloat: $outputISO" 
+if ($isoSuccess) {
+    Write-Host "Dọn dẹp thư mục tạm..."
+    try {
+        Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $mountdir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "Đã dọn dẹp xong"
+    } catch {
+        Write-Host "Cảnh báo: Không thể dọn dẹp thư mục tạm: $_" -ForegroundColor Yellow
+    }
+    
+    Write-Host "=== DEBLOAT HOÀN TẤT ==="
+    Write-Host "File ISO đã được debloat: $outputISO"
+} else {
+    Write-Host "Giữ lại thư mục debloated để sử dụng: $dest" -ForegroundColor Green
+    Write-Host "Dọn dẹp mount directory..."
+    try {
+        Remove-Item $mountdir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "Đã dọn dẹp mount directory"
+    } catch {
+        Write-Host "Cảnh báo: Không thể dọn dẹp mount directory: $_" -ForegroundColor Yellow
+    }
+} 

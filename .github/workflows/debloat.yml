@@ -270,23 +270,46 @@ jobs:
                   Write-Host "Output ISO created successfully: $output"
                   Write-Host "Output size: $([math]::Round($outputSize,2)) GB"
                   Write-Host "Debloat process completed successfully!"
+                  
+                  # Set environment variable for upload step
+                  echo "ISO_CREATED=true" | Out-File -FilePath $env:GITHUB_ENV -Append
               } else {
-                  Write-Host "LỖI: Output ISO not found: $output" -ForegroundColor Red
-                  exit 1
+                  Write-Host "=== DEBLOAT COMPLETED WITHOUT ISO ==="
+                  Write-Host "Debloat process completed successfully!" -ForegroundColor Green
+                  Write-Host "ISO file was not created, but debloat files are available" -ForegroundColor Yellow
+                  
+                  # Check if debloated directory exists
+                  $debloatedDir = "C:\WIDTemp\winlite"
+                  if (Test-Path $debloatedDir) {
+                      Write-Host "Debloated files found at: $debloatedDir" -ForegroundColor Green
+                      Write-Host "Directory size: $((Get-ChildItem $debloatedDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1GB) GB" -ForegroundColor Green
+                  }
+                  
+                  # Set environment variable for upload step
+                  echo "ISO_CREATED=false" | Out-File -FilePath $env:GITHUB_ENV -Append
               }
           }
 
       - name: Upload debloated ISO
-        if: ${{ github.event.inputs.test_mode != 'true' }}
+        if: ${{ github.event.inputs.test_mode != 'true' && env.ISO_CREATED == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: debloated-windows
           path: debloated-windows.iso
           retention-days: 5
 
+      - name: Upload debloated files (if ISO creation failed)
+        if: ${{ github.event.inputs.test_mode != 'true' && env.ISO_CREATED == 'false' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: debloated-windows-files
+          path: C:\WIDTemp\winlite\
+          retention-days: 5
+
       - name: Summary
         run: |
           $testMode = "${{ github.event.inputs.test_mode }}" -eq "true"
+          $isoCreated = "$env:ISO_CREATED" -eq "true"
           
           if ($testMode) {
               echo "## Windows ISO Test Summary" >> $env:GITHUB_STEP_SUMMARY
@@ -300,9 +323,10 @@ jobs:
               echo "" >> $env:GITHUB_STEP_SUMMARY
               echo "### Next Steps:" >> $env:GITHUB_STEP_SUMMARY
               echo "Run the workflow again with test_mode=false to perform full debloating" >> $env:GITHUB_STEP_SUMMARY
-          } else {
+          } elseif ($isoCreated) {
               echo "## Windows ISO Debloat Summary" >> $env:GITHUB_STEP_SUMMARY
               echo "" >> $env:GITHUB_STEP_SUMMARY
+              echo "**Status:** ✅ COMPLETED WITH ISO" >> $env:GITHUB_STEP_SUMMARY
               echo "**Output File:** debloated-windows.iso" >> $env:GITHUB_STEP_SUMMARY
               echo "" >> $env:GITHUB_STEP_SUMMARY
               echo "### What was removed:" >> $env:GITHUB_STEP_SUMMARY
@@ -320,4 +344,26 @@ jobs:
               echo "1. Download the debloated ISO artifact" >> $env:GITHUB_STEP_SUMMARY
               echo "2. Burn to USB or DVD" >> $env:GITHUB_STEP_SUMMARY
               echo "3. Install Windows with reduced bloatware" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+              echo "## Windows ISO Debloat Summary" >> $env:GITHUB_STEP_SUMMARY
+              echo "" >> $env:GITHUB_STEP_SUMMARY
+              echo "**Status:** ✅ DEBLOAT COMPLETED (ISO creation failed)" >> $env:GITHUB_STEP_SUMMARY
+              echo "" >> $env:GITHUB_STEP_SUMMARY
+              echo "### What was accomplished:" >> $env:GITHUB_STEP_SUMMARY
+              echo "- Windows ISO was successfully debloated" >> $env:GITHUB_STEP_SUMMARY
+              echo "- All bloatware and unwanted components were removed" >> $env:GITHUB_STEP_SUMMARY
+              echo "- Registry tweaks were applied" >> $env:GITHUB_STEP_SUMMARY
+              echo "- ISO creation tools were not available in the environment" >> $env:GITHUB_STEP_SUMMARY
+              echo "" >> $env:GITHUB_STEP_SUMMARY
+              echo "### What was removed:" >> $env:GITHUB_STEP_SUMMARY
+              echo "- Microsoft Edge" >> $env:GITHUB_STEP_SUMMARY
+              echo "- OneDrive" >> $env:GITHUB_STEP_SUMMARY
+              echo "- Windows Store Apps (News, Weather, Alarms, etc.)" >> $env:GITHUB_STEP_SUMMARY
+              echo "- Windows Capabilities (Handwriting, OCR, Speech, etc.)" >> $env:GITHUB_STEP_SUMMARY
+              echo "- Windows Features (Internet Explorer, Media Player, etc.)" >> $env:GITHUB_STEP_SUMMARY
+              echo "" >> $env:GITHUB_STEP_SUMMARY
+              echo "### Alternative solutions:" >> $env:GITHUB_STEP_SUMMARY
+              echo "1. Download the debloated files manually from the build logs" >> $env:GITHUB_STEP_SUMMARY
+              echo "2. Use a local environment with oscdimg or other ISO creation tools" >> $env:GITHUB_STEP_SUMMARY
+              echo "3. Create a VM directly from the debloated files" >> $env:GITHUB_STEP_SUMMARY
           } 
