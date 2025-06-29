@@ -196,7 +196,11 @@ Write-Host "Destination exists: $(Test-Path $dest)"
 if (Test-Path $dest) {
     Write-Host "Files in destination root:"
     Get-ChildItem $dest | ForEach-Object { 
-        Write-Host "  $($_.Name) ($($_.PSIsContainer ? 'DIR' : [math]::Round($_.Length / 1MB, 2).ToString() + ' MB'))"
+        if ($_.PSIsContainer) {
+            Write-Host "  $($_.Name) (DIR)"
+        } else {
+            Write-Host "  $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+        }
     }
 } else {
     Write-Host "ERROR: Destination directory does not exist!" -ForegroundColor Red
@@ -753,7 +757,7 @@ if ($isoSuccess) {
     }
     
     Write-Host "=== DEBLOAT HOÀN TẤT ==="
-Write-Host "File ISO đã được debloat: $outputISO" 
+    Write-Host "File ISO đã được debloat: $outputISO" 
 } else {
     Write-Host "Giữ lại thư mục debloated để sử dụng: $dest" -ForegroundColor Green
     Write-Host "Dọn dẹp mount directory..."

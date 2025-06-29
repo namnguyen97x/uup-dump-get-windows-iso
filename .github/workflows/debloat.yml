@@ -204,7 +204,7 @@ jobs:
           
           # Test script syntax first
           Write-Host "=== TESTING SCRIPT SYNTAX ==="
-          $scriptPath = ".\scripts\debloat-windows-iso.ps1"
+          $scriptPath = ".\scripts\debloat-windows-iso-fixed.ps1"
           Write-Host "Script path: $scriptPath"
           Write-Host "Script exists: $(Test-Path $scriptPath)"
           
@@ -248,31 +248,30 @@ jobs:
                   Write-Host "Running in TEST MODE - will only validate WIM file"
               }
               
-                        # Capture all output including errors
-          Write-Host "=== EXECUTING SCRIPT ==="
-                    Write-Host "Script parameters: isoPath='$iso', outputISO='$output', testMode=$testMode"
-          Write-Host "Executing with verbose output..."
-          Write-Host "Expected runtime: 10-30 minutes depending on ISO size"
-          
-          # Execute with full output capture and timeout
-          $timeout = if ($testMode) { 300 } else { 3600 }  # 5 min for test, 60 min for full
-          Write-Host "Setting timeout to $timeout seconds"
-          
-          $startTime = Get-Date
-          Write-Host "Starting script execution at: $startTime"
-          
-          # Execute with verbose output and error capturing
-          Write-Host "Command: powershell.exe -ExecutionPolicy Bypass -File '$scriptPath' -isoPath '$($scriptArgs.isoPath)' -outputISO '$($scriptArgs.outputISO)' $(if ($scriptArgs.testMode) { '-testMode' })"
-          
-          $result = powershell.exe -ExecutionPolicy Bypass -File $scriptPath -isoPath $scriptArgs.isoPath -outputISO $scriptArgs.outputISO $(if ($scriptArgs.testMode) { '-testMode' } else { '' }) 2>&1
-          $exitCode = $LASTEXITCODE
-          $endTime = Get-Date
-          $duration = $endTime - $startTime
-          
-          Write-Host "Script execution completed with exit code: $exitCode"
-          Write-Host "Execution time: $($duration.TotalMinutes.ToString('F2')) minutes"
-          Write-Host "=== FULL SCRIPT OUTPUT ==="
-          $result | ForEach-Object { Write-Host "$_" }
+              # Capture all output including errors
+              Write-Host "Script parameters: isoPath='$iso', outputISO='$output', testMode=$testMode"
+              Write-Host "Executing with verbose output..."
+              Write-Host "Expected runtime: 10-30 minutes depending on ISO size"
+              
+              # Execute with full output capture and timeout
+              $timeout = if ($testMode) { 300 } else { 3600 }  # 5 min for test, 60 min for full
+              Write-Host "Setting timeout to $timeout seconds"
+              
+              $startTime = Get-Date
+              Write-Host "Starting script execution at: $startTime"
+              
+              # Execute with verbose output and error capturing
+              Write-Host "Command: powershell.exe -ExecutionPolicy Bypass -File '$scriptPath' -isoPath '$($scriptArgs.isoPath)' -outputISO '$($scriptArgs.outputISO)' $(if ($scriptArgs.testMode) { '-testMode' })"
+              
+              $result = powershell.exe -ExecutionPolicy Bypass -File $scriptPath -isoPath $scriptArgs.isoPath -outputISO $scriptArgs.outputISO $(if ($scriptArgs.testMode) { '-testMode' } else { '' }) 2>&1
+              $exitCode = $LASTEXITCODE
+              $endTime = Get-Date
+              $duration = $endTime - $startTime
+              
+              Write-Host "Script execution completed with exit code: $exitCode"
+              Write-Host "Execution time: $($duration.TotalMinutes.ToString('F2')) minutes"
+              Write-Host "=== FULL SCRIPT OUTPUT ==="
+              $result | ForEach-Object { Write-Host "$_" }
               
               if ($exitCode -ne 0) {
                   Write-Host "LỖI: Script PowerShell trả về exit code $exitCode" -ForegroundColor Red
