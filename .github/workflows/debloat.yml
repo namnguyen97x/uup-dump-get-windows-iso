@@ -217,16 +217,19 @@ jobs:
               }
               
               # Build script parameters
-              $scriptParams = @("-isoPath", $iso, "-outputISO", $output)
+              $scriptArgs = @{
+                  isoPath = $iso
+                  outputISO = $output
+              }
               if ($testMode) {
-                  $scriptParams += "-testMode"
+                  $scriptArgs.testMode = $true
                   Write-Host "Running in TEST MODE - will only validate WIM file"
               }
               
               # Capture all output including errors
               Write-Host "=== EXECUTING SCRIPT ==="
-              Write-Host "Script parameters: $($scriptParams -join ' ')"
-              $result = & $scriptPath @scriptParams 2>&1
+              Write-Host "Script parameters: isoPath='$iso', outputISO='$output', testMode=$testMode"
+              $result = & $scriptPath @scriptArgs 2>&1
               $exitCode = $LASTEXITCODE
               
               Write-Host "Script execution completed with exit code: $exitCode"
