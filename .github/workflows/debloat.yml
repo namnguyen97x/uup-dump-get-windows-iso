@@ -126,8 +126,12 @@ jobs:
             $fileSize = (Get-Item "windows.iso").Length / 1GB
             Write-Host "🎯 ISO ready: $([math]::Round($fileSize,2)) GB"
             
-            if ($fileSize -lt 3) {
-                Write-Host "⚠️ Warning: ISO size seems small, might not be a complete Windows ISO" -ForegroundColor Yellow
+            if ($fileSize -lt 2) {
+                Write-Host "⚠️ Warning: ISO size seems small ($([math]::Round($fileSize,2)) GB), might not be a complete Windows ISO" -ForegroundColor Yellow
+                
+                if ($fileSize -lt 0.1) {
+                    throw "ISO file is too small ($([math]::Round($fileSize*1024,1)) MB) - likely corrupted or incomplete download"
+                }
             }
         } else {
             throw "ISO download failed - file not found"
@@ -255,6 +259,14 @@ jobs:
             
             $originalSize = $originalISO.Length / 1GB
             $debloatedSize = $debloatedISO.Length / 1GB
+            
+            # Check if debloated ISO is suspiciously small (likely a dummy file)
+            if ($debloatedSize -lt 0.001) {  # Less than 1MB
+                Write-Host "❌ Debloated ISO is too small ($([math]::Round($debloatedSize * 1024, 2)) MB)" -ForegroundColor Red
+                Write-Host "This suggests the debloating process failed to create a valid ISO" -ForegroundColor Red
+                throw "Debloating failed - output file is not a valid ISO"
+            }
+            
             $savedSpace = $originalSize - $debloatedSize
             $percentage = ($savedSpace / $originalSize) * 100
             

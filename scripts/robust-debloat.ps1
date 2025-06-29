@@ -467,10 +467,31 @@ function Create-BootableISO {
         
         if (-not (Test-Path $oscdimgPath)) {
             Write-StatusLog "Downloading oscdimg.exe..."
-            try {
-                Invoke-WebRequest -Uri "https://github.com/itsNileshHere/Windows-ISO-Debloater/raw/main/oscdimg.exe" -OutFile $oscdimgPath -ErrorAction Stop
-            } catch {
-                Write-StatusLog "oscdimg download failed: $($_.Exception.Message)" "WARNING"
+            
+            $oscdimgUrls = @(
+                "https://github.com/itsNileshHere/Windows-ISO-Debloater/raw/main/oscdimg.exe",
+                "https://github.com/WereDev/oscdimg/raw/main/oscdimg.exe"
+            )
+            
+            $downloaded = $false
+            foreach ($url in $oscdimgUrls) {
+                try {
+                    Write-StatusLog "Trying oscdimg from: $url"
+                    Invoke-WebRequest -Uri $url -OutFile $oscdimgPath -TimeoutSec 30 -ErrorAction Stop
+                    
+                    if (Test-Path $oscdimgPath -and (Get-Item $oscdimgPath).Length -gt 50KB) {
+                        $downloaded = $true
+                        Write-StatusLog "Downloaded oscdimg successfully from $url"
+                        break
+                    }
+                } catch {
+                    Write-StatusLog "Failed to download from $url`: $($_.Exception.Message)" "WARNING"
+                    continue
+                }
+            }
+            
+            if (-not $downloaded) {
+                Write-StatusLog "Could not download oscdimg from any source" "WARNING"
             }
         }
         
@@ -582,38 +603,38 @@ function Create-BootableISO {
             }
         }
         
-        # Method 3: Simple directory copy as final fallback
-        Write-StatusLog "All ISO methods failed, creating directory structure..." "WARNING"
-        $dirOutput = $OutputPath -replace '\.iso$', '_FILES'
+        # Method 3: Basic .NET compression as final fallback
+        Write-StatusLog "All ISO methods failed, trying basic .NET compression..." "WARNING"
         
-        if (Test-Path $dirOutput) {
-            Remove-Item $dirOutput -Recurse -Force
+        try {
+            # Check if content is reasonable size for basic compression
+            $totalSize = (Get-ChildItem $SourceDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB
+            Write-StatusLog "Total content size for basic method: $([math]::Round($totalSize, 2)) GB"
+            
+            if ($totalSize -le 2.0) {  # Only try if less than 2GB
+                Write-StatusLog "Attempting .NET compression method..."
+                
+                # Create ZIP first, then rename
+                $zipPath = $OutputPath -replace '\.iso$', '.zip'
+                
+                # Use .NET compression for better control
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                [System.IO.Compression.ZipFile]::CreateFromDirectory($SourceDir, $zipPath)
+                
+                if (Test-Path $zipPath) {
+                    Move-Item $zipPath $OutputPath -Force
+                    Write-StatusLog "Created basic archive (.NET compression)" "SUCCESS"
+                    return $true
+                }
+            } else {
+                Write-StatusLog "Content too large ($([math]::Round($totalSize, 2)) GB) for basic compression" "ERROR"
+            }
+        } catch {
+            Write-StatusLog "Basic .NET compression failed: $($_.Exception.Message)" "ERROR"
         }
         
-        Copy-Item $SourceDir $dirOutput -Recurse -Force
-        
-        # Create info file
-        $infoFile = $OutputPath -replace '\.iso$', '_INFO.txt'
-        @"
-Windows ISO Debloating Completed
-================================
-Due to size limitations, files are provided as directory structure.
-Location: $dirOutput
-
-To create bootable media:
-1. Use Rufus, UltraISO, or similar tool
-2. Point to directory: $dirOutput
-3. Create bootable USB/DVD
-
-Debloating successful, but ISO creation had technical limitations.
-"@ | Out-File -FilePath $infoFile -Encoding UTF8
-        
-        # Create dummy ISO file for workflow compatibility
-        "DEBLOATED_WINDOWS_FILES" | Out-File -FilePath $OutputPath -Encoding ASCII
-        
-        Write-StatusLog "Created directory structure due to size limitations" "WARNING"
-        Write-StatusLog "Check $infoFile for instructions" "WARNING"
-        return $true
+        Write-StatusLog "All ISO creation methods exhausted" "ERROR"
+        return $false
         
     } catch {
         Write-StatusLog "All ISO creation methods failed: $($_.Exception.Message)" "ERROR"

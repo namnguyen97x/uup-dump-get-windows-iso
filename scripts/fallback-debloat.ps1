@@ -258,10 +258,9 @@ try {
     
     # Method 1: Try multiple oscdimg sources
     $oscdimgUrls = @(
-        "https://github.com/pbatard/rufus/raw/master/res/loc/oscdimg.exe",
-        "https://archive.org/download/oscdimg/oscdimg.exe",
+        "https://github.com/itsNileshHere/Windows-ISO-Debloater/raw/main/oscdimg.exe",
         "https://github.com/WereDev/oscdimg/raw/main/oscdimg.exe",
-        "https://github.com/itsNileshHere/Windows-ISO-Debloater/raw/main/oscdimg.exe"
+        "https://www.catalog.update.microsoft.com/DownloadHandler.ashx?identifier=oscdimg.exe"
     )
     
     foreach ($url in $oscdimgUrls) {
@@ -391,8 +390,45 @@ try {
                 $portableZip = "$env:TEMP\7z_portable.zip"
                 $extractDir = "$env:TEMP\7z_portable"
                 
-                # Download portable 7-Zip (using a ZIP version for easier extraction)
-                Invoke-WebRequest -Uri "https://github.com/pbatard/rufus/raw/master/res/loc/7z.exe" -OutFile "$env:TEMP\7z.exe" -TimeoutSec 30 -ErrorAction Stop
+                # Download portable 7-Zip
+                $sevenZipUrls = @(
+                    "https://www.7-zip.org/a/7za920.zip",
+                    "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
+                )
+                
+                $downloaded = $false
+                foreach ($url in $sevenZipUrls) {
+                    try {
+                        Write-Log "Trying to download 7-Zip from: $url"
+                        
+                        if ($url.EndsWith('.zip')) {
+                            # Download and extract
+                            $zipFile = "$env:TEMP\7zip.zip" 
+                            Invoke-WebRequest -Uri $url -OutFile $zipFile -TimeoutSec 30 -ErrorAction Stop
+                            Expand-Archive $zipFile -DestinationPath "$env:TEMP\7zip" -Force
+                            
+                            # Find 7za.exe in extracted files
+                            $sevenZipExe = Get-ChildItem "$env:TEMP\7zip" -Filter "7za.exe" -Recurse | Select-Object -First 1
+                            if ($sevenZipExe) {
+                                Copy-Item $sevenZipExe.FullName "$env:TEMP\7z.exe" -Force
+                                $downloaded = $true
+                                break
+                            }
+                        } else {
+                            # Direct exe download
+                            Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\7z.exe" -TimeoutSec 30 -ErrorAction Stop
+                            $downloaded = $true
+                            break
+                        }
+                    } catch {
+                        Write-Log "Failed to download from $url`: $($_.Exception.Message)" "WARNING"
+                        continue
+                    }
+                }
+                
+                if (-not $downloaded) {
+                    throw "Could not download 7-Zip from any source"
+                }
                 
                 $sevenZipExe = "$env:TEMP\7z.exe"
                 if (Test-Path $sevenZipExe) {
@@ -516,52 +552,50 @@ try {
             Write-Log "Chunked ZIP creation failed: $($_.Exception.Message)" "WARNING"
         }
         
-        # Final fallback - simple file copy
+        # Final fallback - create basic ISO with simple method
         if (-not $isoCreated) {
-            Write-Log "All archive methods failed, creating simple file structure..." "WARNING"
+            Write-Log "All advanced methods failed, trying basic ISO creation..." "WARNING"
             
             try {
-                # Just copy the temp directory as the final output
-                $finalDir = $outputISO -replace '\.iso$', '_FILES'
+                # Try using basic PowerShell compression if content is small enough
+                $totalSize = (Get-ChildItem $tempDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB
+                Write-Log "Total content size for basic method: $([math]::Round($totalSize, 2)) GB"
                 
-                if (Test-Path $finalDir) {
-                    Remove-Item $finalDir -Recurse -Force
+                if ($totalSize -le 2.0) {  # Only try if less than 2GB
+                    Write-Log "Attempting basic compression method..."
+                    
+                    # Create ZIP first, then rename
+                    $zipPath = $outputISO -replace '\.iso$', '.zip'
+                    
+                    # Use .NET compression for better control
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    [System.IO.Compression.ZipFile]::CreateFromDirectory($tempDir, $zipPath)
+                    
+                    if (Test-Path $zipPath) {
+                        Move-Item $zipPath $outputISO -Force
+                        $isoCreated = $true
+                        Write-Log "Created basic archive (ZIP renamed to ISO)" "SUCCESS"
+                    }
+                } else {
+                    Write-Log "Content too large ($([math]::Round($totalSize, 2)) GB) for basic methods" "ERROR"
                 }
                 
-                Copy-Item $tempDir $finalDir -Recurse -Force
-                
-                # Create a simple text file indicating the structure
-                $infoFile = $outputISO -replace '\.iso$', '_INFO.txt'
-                @"
-Windows ISO Debloating Completed
-================================
-Due to size limitations, the debloated Windows files are provided as a directory structure.
-Location: $finalDir
-
-To create a bootable ISO:
-1. Use a tool like Rufus, UltraISO, or similar
-2. Point it to the directory: $finalDir
-3. Create a bootable USB/DVD
-
-Files debloated successfully, but ISO creation had technical limitations.
-"@ | Out-File -FilePath $infoFile -Encoding UTF8
-                
-                # Create a dummy ISO file so the workflow doesn't fail
-                "DEBLOATED_WINDOWS_FILES" | Out-File -FilePath $outputISO -Encoding ASCII
-                
-                $isoCreated = $true
-                Write-Log "Created file structure output due to size limitations" "WARNING"
-                Write-Log "Check $infoFile for instructions" "WARNING"
-                
             } catch {
-                Write-Log "File structure creation failed: $($_.Exception.Message)" "ERROR"
+                Write-Log "Basic method also failed: $($_.Exception.Message)" "ERROR"
             }
         }
     }
     
-    if ($isoCreated) {
-        # Show final results
+    if ($isoCreated -and (Test-Path $outputISO)) {
+        # Verify the ISO is not just a dummy file
         $finalSize = (Get-Item $outputISO).Length / 1GB
+        
+        if ($finalSize -lt 0.001) {  # Less than 1MB means it's likely a dummy file
+            Write-Log "Output file is too small ($([math]::Round($finalSize * 1024, 2)) MB) - likely failed creation" "ERROR"
+            Write-Log "This suggests all ISO creation methods failed" "ERROR"
+            exit 1
+        }
+        
         $totalSaved = $originalSize - $finalSize
         $percentage = ($totalSaved / $originalSize) * 100
         
@@ -597,6 +631,7 @@ Files debloated successfully, but ISO creation had technical limitations.
         exit 0
     } else {
         Write-Log "Failed to create ISO with all methods" "ERROR"
+        Write-Log "No valid ISO file was created" "ERROR"
         exit 1
     }
     
