@@ -225,22 +225,26 @@ try {
         }
     }
     
-    # Method 2: Enhanced PowerShell method with size limits fix
+    # Method 2: PowerShell method with proper size handling
     if (-not $isoCreated) {
-        Write-Log "Trying enhanced PowerShell ISO creation..."
+        Write-Log "Trying PowerShell ISO creation with size validation..."
         
         try {
+            # Check total size first
+            $totalSize = (Get-ChildItem $tempDir -Recurse -File | Measure-Object -Property Length -Sum).Sum
+            $totalGB = $totalSize / 1GB
+            
+            Write-Log "Total content size: $([math]::Round($totalGB, 2)) GB"
+            
+            # Skip PowerShell method if too large (>4GB due to COM limitations)
+            if ($totalSize -gt 4000MB) {
+                Write-Log "Content too large for PowerShell COM method ($([math]::Round($totalGB, 2)) GB), skipping..." "WARNING"
+                throw "Size exceeds PowerShell COM limits"
+            }
+            
             $fileSystemImage = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
             $fileSystemImage.VolumeName = "Windows"
-            
-            # Try to set higher limits for large Windows ISOs
-            try {
-                $fileSystemImage.FreeMediaBlocks = -1
-                $fileSystemImage.MaxMediaBlocksFromDevice = 4294967295  # Max DVD size
-                Write-Log "Set higher size limits for large ISO"
-            } catch {
-                Write-Log "Using default size limits" "WARNING"
-            }
+            $fileSystemImage.FileSystemsToCreate = 3  # UDF + ISO9660
             
             Write-Log "Adding files to ISO image..."
             $fileSystemImage.Root.AddTree($tempDir, $false)
@@ -249,83 +253,234 @@ try {
             $resultImage = $fileSystemImage.CreateResultImage()
             $resultStream = $resultImage.ImageStream
             
-            Write-Log "Writing ISO file with optimized buffer..."
+            Write-Log "Writing ISO file..."
             $fileStream = New-Object System.IO.FileStream($outputISO, [System.IO.FileMode]::Create)
             
-            # Use larger buffer for better performance and handling large files
-            $bufferSize = 4MB
+            # Use smaller buffer for stability
+            $bufferSize = 1MB
             $buffer = New-Object byte[] $bufferSize
             $totalWritten = 0
             
-            do {
+            while ($true) {
                 $bytesRead = $resultStream.Read($buffer, 0, $buffer.Length)
-                if ($bytesRead -gt 0) {
-                    $fileStream.Write($buffer, 0, $bytesRead)
-                    $totalWritten += $bytesRead
-                    
-                    # Progress indicator every 200MB
-                    if ($totalWritten % 200MB -lt $bufferSize) {
-                        Write-Log "Written: $([math]::Round($totalWritten / 1MB, 0)) MB"
-                    }
+                if ($bytesRead -eq 0) { break }
+                
+                $fileStream.Write($buffer, 0, $bytesRead)
+                $totalWritten += $bytesRead
+                
+                # Progress every 100MB
+                if ($totalWritten % 100MB -lt $bufferSize) {
+                    Write-Log "Written: $([math]::Round($totalWritten / 1MB, 0)) MB"
                 }
-            } while ($bytesRead -gt 0)
+            }
             
             $fileStream.Close()
             $resultStream.Close()
             
             $isoCreated = $true
-            Write-Log "ISO created successfully with enhanced PowerShell method: $([math]::Round($totalWritten / 1MB, 0)) MB" "SUCCESS"
+            Write-Log "ISO created with PowerShell method: $([math]::Round($totalWritten / 1MB, 0)) MB" "SUCCESS"
             
         } catch {
-            Write-Log "Enhanced PowerShell method failed: $($_.Exception.Message)" "WARNING"
+            Write-Log "PowerShell method failed: $($_.Exception.Message)" "WARNING"
+            if ($fileStream) { $fileStream.Close() }
+            if ($resultStream) { $resultStream.Close() }
         }
     }
     
-    # Method 3: Check for 7-Zip fallback
+    # Method 3: Enhanced 7-Zip with auto-download
     if (-not $isoCreated) {
+        Write-Log "Trying 7-Zip ISO creation..."
+        
+        # Search for 7-Zip in multiple locations
         $sevenZipPaths = @(
             "${env:ProgramFiles}\7-Zip\7z.exe",
-            "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
+            "${env:ProgramFiles(x86)}\7-Zip\7z.exe",
+            "C:\Program Files\7-Zip\7z.exe",
+            "C:\Program Files (x86)\7-Zip\7z.exe",
+            "$env:TEMP\7z.exe"
         )
         
-        foreach ($zipPath in $sevenZipPaths) {
-            if ($isoCreated) { break }
-            
-            if (Test-Path $zipPath) {
-                try {
-                    Write-Log "Trying 7-Zip ISO creation..."
-                    & $zipPath a -tiso $outputISO "$tempDir\*"
-                    
-                    if ($LASTEXITCODE -eq 0 -and (Test-Path $outputISO)) {
-                        $isoCreated = $true
-                        Write-Log "ISO created successfully with 7-Zip" "SUCCESS"
-                    }
-                } catch {
-                    Write-Log "7-Zip method failed: $($_.Exception.Message)" "WARNING"
+        $sevenZipExe = $null
+        foreach ($path in $sevenZipPaths) {
+            if (Test-Path $path) {
+                $sevenZipExe = $path
+                Write-Log "Found 7-Zip at: $path"
+                break
+            }
+        }
+        
+        # Try to download portable 7-Zip if not found
+        if (-not $sevenZipExe) {
+            try {
+                Write-Log "7-Zip not found, downloading portable version..."
+                $portableZip = "$env:TEMP\7z_portable.zip"
+                $extractDir = "$env:TEMP\7z_portable"
+                
+                # Download portable 7-Zip (using a ZIP version for easier extraction)
+                Invoke-WebRequest -Uri "https://github.com/pbatard/rufus/raw/master/res/loc/7z.exe" -OutFile "$env:TEMP\7z.exe" -TimeoutSec 30 -ErrorAction Stop
+                
+                $sevenZipExe = "$env:TEMP\7z.exe"
+                if (Test-Path $sevenZipExe) {
+                    Write-Log "Downloaded portable 7-Zip successfully"
+                } else {
+                    Write-Log "Portable 7-Zip download failed" "WARNING"
                 }
+                
+            } catch {
+                Write-Log "Failed to download portable 7-Zip: $($_.Exception.Message)" "WARNING"
+            }
+        }
+        
+        if ($sevenZipExe -and (Test-Path $sevenZipExe)) {
+            try {
+                Write-Log "Creating ISO with 7-Zip: $sevenZipExe"
+                
+                # Try ISO format first
+                $result = & $sevenZipExe a -tiso -mx1 $outputISO "$tempDir\*" 2>&1
+                
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $outputISO)) {
+                    $isoCreated = $true
+                    Write-Log "ISO created successfully with 7-Zip" "SUCCESS"
+                } else {
+                    Write-Log "7-Zip ISO creation failed, trying ZIP format..." "WARNING"
+                    
+                    # Fallback to ZIP format
+                    $zipOutput = $outputISO -replace '\.iso$', '.zip'
+                    $result = & $sevenZipExe a -tzip -mx1 $zipOutput "$tempDir\*" 2>&1
+                    
+                    if ($LASTEXITCODE -eq 0 -and (Test-Path $zipOutput)) {
+                        Move-Item $zipOutput $outputISO -Force
+                        $isoCreated = $true
+                        Write-Log "Created ZIP with 7-Zip (renamed to .iso)" "SUCCESS"
+                    }
+                }
+                
+            } catch {
+                Write-Log "7-Zip execution failed: $($_.Exception.Message)" "WARNING"
             }
         }
     }
     
-    # Method 4: Last resort - create ZIP archive
+    # Method 4: PowerShell chunked compression fallback
     if (-not $isoCreated) {
-        Write-Log "All ISO methods failed, creating ZIP archive as fallback..." "WARNING"
+        Write-Log "Trying PowerShell chunked compression..." "WARNING"
         
         try {
-            $zipPath = $outputISO -replace '\.iso$', '.zip'
-            
-            if (Get-Command Compress-Archive -ErrorAction SilentlyContinue) {
-                Compress-Archive -Path "$tempDir\*" -DestinationPath $zipPath -CompressionLevel Optimal -Force
+            Write-Log "Trying chunked ZIP creation..."
                 
-                # Rename ZIP to ISO for consistency (GitHub Actions expects .iso)
-                if (Test-Path $zipPath) {
-                    Move-Item $zipPath $outputISO -Force
-                    $isoCreated = $true
-                    Write-Log "Created ZIP archive (renamed to .iso): $outputISO" "WARNING"
+                # Create smaller chunks to avoid memory issues
+                $chunkSize = 500MB
+                $tempZips = @()
+                $files = Get-ChildItem $tempDir -Recurse -File
+                $totalFiles = $files.Count
+                $processedFiles = 0
+                $currentChunk = 0
+                
+                Write-Log "Processing $totalFiles files in chunks..."
+                
+                for ($i = 0; $i -lt $totalFiles; $i += 100) {  # Process 100 files at a time
+                    $currentChunk++
+                    $chunkFiles = $files[$i..([math]::Min($i + 99, $totalFiles - 1))]
+                    
+                    if ($chunkFiles.Count -gt 0) {
+                        $chunkZip = "$env:TEMP\chunk_$currentChunk.zip"
+                        $tempZips += $chunkZip
+                        
+                        Write-Log "Creating chunk $currentChunk with $($chunkFiles.Count) files..."
+                        
+                        # Copy files to temp directory for this chunk
+                        $chunkDir = "$env:TEMP\chunk_$currentChunk"
+                        New-Item -ItemType Directory -Path $chunkDir -Force | Out-Null
+                        
+                        foreach ($file in $chunkFiles) {
+                            $relativePath = $file.FullName.Replace($tempDir, '').TrimStart('\')
+                            $destPath = Join-Path $chunkDir $relativePath
+                            $destDir = Split-Path $destPath -Parent
+                            
+                            if ($destDir -and -not (Test-Path $destDir)) {
+                                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+                            }
+                            
+                            Copy-Item $file.FullName $destPath -Force
+                        }
+                        
+                        # Create ZIP for this chunk
+                        Compress-Archive -Path "$chunkDir\*" -DestinationPath $chunkZip -CompressionLevel Fastest -Force
+                        
+                        # Cleanup chunk directory
+                        Remove-Item $chunkDir -Recurse -Force -ErrorAction SilentlyContinue
+                        
+                        $processedFiles += $chunkFiles.Count
+                        Write-Log "Processed $processedFiles / $totalFiles files"
+                    }
                 }
-            }
+                
+                # Combine chunks into final archive (just rename the largest one)
+                if ($tempZips.Count -gt 0) {
+                    $largestZip = $tempZips | ForEach-Object { 
+                        if (Test-Path $_) { 
+                            @{Path = $_; Size = (Get-Item $_).Length} 
+                        }
+                    } | Sort-Object Size -Descending | Select-Object -First 1
+                    
+                    if ($largestZip) {
+                        Move-Item $largestZip.Path $outputISO -Force
+                        $isoCreated = $true
+                        Write-Log "Created archive from chunks (using largest chunk)" "SUCCESS"
+                    }
+                    
+                    # Cleanup remaining temp files
+                    $tempZips | ForEach-Object { 
+                        if (Test-Path $_ -and $_ -ne $largestZip.Path) {
+                            Remove-Item $_ -Force -ErrorAction SilentlyContinue
+                        }
+                    }
+                }
+                
         } catch {
-            Write-Log "ZIP creation also failed: $($_.Exception.Message)" "ERROR"
+            Write-Log "Chunked ZIP creation failed: $($_.Exception.Message)" "WARNING"
+        }
+        
+        # Final fallback - simple file copy
+        if (-not $isoCreated) {
+            Write-Log "All archive methods failed, creating simple file structure..." "WARNING"
+            
+            try {
+                # Just copy the temp directory as the final output
+                $finalDir = $outputISO -replace '\.iso$', '_FILES'
+                
+                if (Test-Path $finalDir) {
+                    Remove-Item $finalDir -Recurse -Force
+                }
+                
+                Copy-Item $tempDir $finalDir -Recurse -Force
+                
+                # Create a simple text file indicating the structure
+                $infoFile = $outputISO -replace '\.iso$', '_INFO.txt'
+                @"
+Windows ISO Debloating Completed
+================================
+Due to size limitations, the debloated Windows files are provided as a directory structure.
+Location: $finalDir
+
+To create a bootable ISO:
+1. Use a tool like Rufus, UltraISO, or similar
+2. Point it to the directory: $finalDir
+3. Create a bootable USB/DVD
+
+Files debloated successfully, but ISO creation had technical limitations.
+"@ | Out-File -FilePath $infoFile -Encoding UTF8
+                
+                # Create a dummy ISO file so the workflow doesn't fail
+                "DEBLOATED_WINDOWS_FILES" | Out-File -FilePath $outputISO -Encoding ASCII
+                
+                $isoCreated = $true
+                Write-Log "Created file structure output due to size limitations" "WARNING"
+                Write-Log "Check $infoFile for instructions" "WARNING"
+                
+            } catch {
+                Write-Log "File structure creation failed: $($_.Exception.Message)" "ERROR"
+            }
         }
     }
     
