@@ -211,7 +211,7 @@ jobs:
                 Write-Host "⚠️ Robust script timeout/stuck - killing and using fallback..." -ForegroundColor Yellow
                 
                 # Stop the job
-                Stop-Job $job -Force
+                Stop-Job $job
                 Remove-Job $job -Force
                 
                 # Kill any stuck DISM processes
