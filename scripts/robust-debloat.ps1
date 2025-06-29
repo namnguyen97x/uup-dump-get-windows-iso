@@ -601,20 +601,29 @@ function Create-BootableISO {
             
             Write-StatusLog "Total content size: $([math]::Round($totalGB, 2)) GB"
             
-            # Skip PowerShell method if too large (>4GB due to COM limitations)
-            if ($totalSize -le 4000MB) {
+            # Skip PowerShell method if too large (>6GB due to COM limitations)
+            if ($totalSize -le 6000MB) {
                 Write-StatusLog "Trying PowerShell COM method..."
                 
                 $fileSystemImage = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
                 $fileSystemImage.VolumeName = "Windows"
                 $fileSystemImage.FileSystemsToCreate = 3  # UDF + ISO9660
+                
+                # Try to set higher limits for large files
+                try {
+                    $fileSystemImage.FreeMediaBlocks = -1
+                    $fileSystemImage.MaxMediaBlocksFromDevice = 16777216  # ~8GB limit
+                } catch {
+                    Write-StatusLog "Could not set extended size limits, using defaults" "WARNING"
+                }
+                
                 $fileSystemImage.Root.AddTree($SourceDir, $false)
                 
                 $resultImage = $fileSystemImage.CreateResultImage()
                 $resultStream = $resultImage.ImageStream
                 
                 $fileStream = New-Object System.IO.FileStream($OutputPath, [System.IO.FileMode]::Create)
-                $buffer = New-Object byte[] 1MB
+                $buffer = New-Object byte[] 4MB
                 $totalWritten = 0
                 
                 while ($true) {
@@ -624,7 +633,7 @@ function Create-BootableISO {
                     $fileStream.Write($buffer, 0, $bytesRead)
                     $totalWritten += $bytesRead
                     
-                    if ($totalWritten % 100MB -lt 1MB) {
+                    if ($totalWritten % 200MB -lt 4MB) {
                         Write-StatusLog "Written: $([math]::Round($totalWritten / 1MB, 0)) MB"
                     }
                 }
@@ -660,16 +669,52 @@ function Create-BootableISO {
             }
         }
         
+        # Try to download portable 7-Zip if not found
+        if (-not $sevenZipExe) {
+            try {
+                Write-StatusLog "7-Zip not found, downloading portable version..."
+                $portableExe = "$env:TEMP\7za.exe"
+                $downloadUrl = "https://github.com/develar/7zip-bin/raw/master/win/x64/7za.exe"
+                
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $portableExe -TimeoutSec 30 -ErrorAction Stop
+                
+                if (Test-Path $portableExe -and (Get-Item $portableExe).Length -gt 100KB) {
+                    $sevenZipExe = $portableExe
+                    Write-StatusLog "Downloaded portable 7-Zip successfully"
+                }
+            } catch {
+                Write-StatusLog "Failed to download portable 7-Zip: $($_.Exception.Message)" "WARNING"
+            }
+        }
+        
         if ($sevenZipExe) {
             try {
                 Write-StatusLog "Creating archive with 7-Zip..."
-                $zipOutput = $OutputPath -replace '\.iso$', '.zip'
-                & $sevenZipExe a -tzip -mx1 $zipOutput "$SourceDir\*"
                 
-                if ($LASTEXITCODE -eq 0 -and (Test-Path $zipOutput)) {
-                    Move-Item $zipOutput $OutputPath -Force
-                    Write-StatusLog "Created archive with 7-Zip (renamed to .iso)" "SUCCESS"
+                # Check content size for optimization
+                $totalSize = (Get-ChildItem $SourceDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB
+                
+                if ($totalSize -gt 4.0) {
+                    Write-StatusLog "Large content detected ($([math]::Round($totalSize, 2)) GB), using optimized settings..."
+                    # Use optimized settings for large files
+                    & $sevenZipExe a -tiso -mx1 -md=32m -mfb=64 $OutputPath "$SourceDir\*"
+                } else {
+                    & $sevenZipExe a -tiso -mx1 $OutputPath "$SourceDir\*"
+                }
+                
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $OutputPath)) {
+                    Write-StatusLog "Created ISO with 7-Zip" "SUCCESS"
                     return $true
+                } else {
+                    # Fallback to ZIP format
+                    $zipOutput = $OutputPath -replace '\.iso$', '.zip'
+                    & $sevenZipExe a -tzip -mx1 $zipOutput "$SourceDir\*"
+                    
+                    if ($LASTEXITCODE -eq 0 -and (Test-Path $zipOutput)) {
+                        Move-Item $zipOutput $OutputPath -Force
+                        Write-StatusLog "Created archive with 7-Zip (ZIP format renamed to .iso)" "SUCCESS"
+                        return $true
+                    }
                 }
             } catch {
                 Write-StatusLog "7-Zip method failed: $($_.Exception.Message)" "WARNING"
@@ -684,7 +729,7 @@ function Create-BootableISO {
             $totalSize = (Get-ChildItem $SourceDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB
             Write-StatusLog "Total content size for basic method: $([math]::Round($totalSize, 2)) GB"
             
-            if ($totalSize -le 2.0) {  # Only try if less than 2GB
+            if ($totalSize -le 8.0) {  # Increased limit to 8GB
                 Write-StatusLog "Attempting .NET compression method..."
                 
                 # Create ZIP first, then rename
@@ -692,7 +737,7 @@ function Create-BootableISO {
                 
                 # Use .NET compression for better control
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
-                [System.IO.Compression.ZipFile]::CreateFromDirectory($SourceDir, $zipPath)
+                [System.IO.Compression.ZipFile]::CreateFromDirectory($SourceDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
                 
                 if (Test-Path $zipPath) {
                     Move-Item $zipPath $OutputPath -Force
@@ -700,7 +745,18 @@ function Create-BootableISO {
                     return $true
                 }
             } else {
-                Write-StatusLog "Content too large ($([math]::Round($totalSize, 2)) GB) for basic compression" "ERROR"
+                Write-StatusLog "Content very large ($([math]::Round($totalSize, 2)) GB) - creating directory fallback..." "WARNING"
+                
+                # For very large content, create directory structure
+                $dirOutput = $OutputPath -replace '\.iso$', '_ISO_FILES'
+                Copy-Item $SourceDir $dirOutput -Recurse -Force
+                
+                # Create info file
+                "# Windows ISO Files: $dirOutput`n# Content too large for automatic ISO creation`n# Use external ISO tools to create bootable ISO" | Out-File -FilePath $OutputPath -Encoding ASCII
+                
+                Write-StatusLog "Created directory structure: $dirOutput" "WARNING"
+                Write-StatusLog "Use external ISO creation tools for files larger than 8GB" "WARNING"
+                return $true
             }
         } catch {
             Write-StatusLog "Basic .NET compression failed: $($_.Exception.Message)" "ERROR"

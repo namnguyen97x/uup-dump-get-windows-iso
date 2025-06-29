@@ -33,12 +33,13 @@ function Get-OscdimgTool {
         }
     }
     
-    # Method 2: Try alternative download sources
+    # Method 2: Try updated download sources
     $oscdimgPath = "$env:TEMP\oscdimg.exe"
     $downloadUrls = @(
         "https://github.com/pbatard/rufus/raw/master/res/loc/oscdimg.exe",
+        "https://github.com/WereDev/oscdimg/raw/main/oscdimg.exe",
         "https://archive.org/download/oscdimg/oscdimg.exe",
-        "https://github.com/WereDev/oscdimg/raw/main/oscdimg.exe"
+        "https://github.com/nanairo/oscdimg/raw/main/oscdimg.exe"
     )
     
     foreach ($url in $downloadUrls) {
@@ -107,15 +108,25 @@ function Create-ISOWithPowerShell {
     Write-Log "Creating ISO with PowerShell method..."
     
     try {
+        # Check content size first
+        $sourceSize = (Get-ChildItem $SourcePath -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB
+        Write-Log "Source content size: $([math]::Round($sourceSize, 2)) GB"
+        
+        # Skip PowerShell method for very large content (>6GB)
+        if ($sourceSize -gt 6.0) {
+            Write-Log "Content too large for PowerShell COM method ($([math]::Round($sourceSize, 2)) GB)" "WARNING"
+            throw "Content exceeds PowerShell method size limits"
+        }
+        
         # Method 1: Standard IMAPI2FS with optimizations
         $fileSystemImage = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
         $fileSystemImage.VolumeName = $Label
         
         # Set larger limits for Windows ISOs
         try {
-            # Try to set higher limits (may not work on all systems)
+            # Try to set higher limits for large files
             $fileSystemImage.FreeMediaBlocks = -1
-            $fileSystemImage.MaxMediaBlocksFromDevice = 4294967295  # Max DVD size
+            $fileSystemImage.MaxMediaBlocksFromDevice = 16777216  # ~8GB limit
         } catch {
             Write-Log "Could not set size limits, using defaults" "WARNING"
         }
@@ -130,8 +141,8 @@ function Create-ISOWithPowerShell {
         Write-Log "Writing ISO file..."
         $fileStream = New-Object System.IO.FileStream($OutputPath, [System.IO.FileMode]::Create)
         
-        # Use larger buffer for better performance
-        $bufferSize = 4MB
+        # Use larger buffer for better performance with large files
+        $bufferSize = 8MB
         $buffer = New-Object byte[] $bufferSize
         $totalWritten = 0
         
@@ -141,8 +152,8 @@ function Create-ISOWithPowerShell {
                 $fileStream.Write($buffer, 0, $bytesRead)
                 $totalWritten += $bytesRead
                 
-                # Progress indicator every 100MB
-                if ($totalWritten % 100MB -lt $bufferSize) {
+                # Progress indicator every 200MB for large files
+                if ($totalWritten % 200MB -lt $bufferSize) {
                     Write-Log "Written: $([math]::Round($totalWritten / 1MB, 0)) MB"
                 }
             }
@@ -157,19 +168,35 @@ function Create-ISOWithPowerShell {
     } catch {
         Write-Log "PowerShell ISO creation failed: $($_.Exception.Message)" "ERROR"
         
-        # Method 2: Try with WinRAR/7-Zip if available
-        if (Test-Path "${env:ProgramFiles}\7-Zip\7z.exe") {
-            Write-Log "Trying 7-Zip ISO creation as fallback..."
-            try {
-                $7zipPath = "${env:ProgramFiles}\7-Zip\7z.exe"
-                & $7zipPath a -tiso "$OutputPath" "$SourcePath\*"
-                
-                if ($LASTEXITCODE -eq 0 -and (Test-Path $OutputPath)) {
-                    Write-Log "ISO created successfully with 7-Zip" "SUCCESS"
-                    return $true
+        # Cleanup on failure
+        if ($fileStream) { $fileStream.Close() }
+        if ($resultStream) { $resultStream.Close() }
+        
+        # Method 2: Try with 7-Zip if available
+        $sevenZipPaths = @(
+            "${env:ProgramFiles}\7-Zip\7z.exe",
+            "${env:ProgramFiles(x86)}\7-Zip\7z.exe"
+        )
+        
+        foreach ($zipPath in $sevenZipPaths) {
+            if (Test-Path $zipPath) {
+                Write-Log "Trying 7-Zip ISO creation as fallback..."
+                try {
+                    # Use optimized settings for large files
+                    if ($sourceSize -gt 4.0) {
+                        & $zipPath a -tiso -mx1 -md=32m -mfb=64 "$OutputPath" "$SourcePath\*"
+                    } else {
+                        & $zipPath a -tiso -mx1 "$OutputPath" "$SourcePath\*"
+                    }
+                    
+                    if ($LASTEXITCODE -eq 0 -and (Test-Path $OutputPath)) {
+                        Write-Log "ISO created successfully with 7-Zip fallback" "SUCCESS"
+                        return $true
+                    }
+                } catch {
+                    Write-Log "7-Zip fallback also failed: $($_.Exception.Message)" "WARNING"
                 }
-            } catch {
-                Write-Log "7-Zip method also failed: $($_.Exception.Message)" "WARNING"
+                break
             }
         }
         
