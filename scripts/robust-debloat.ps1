@@ -272,7 +272,7 @@ function Mount-WindowsImage {
         }
     }
     
-    Write-StatusLog "All mount strategies failed" "ERROR"
+    Write-StatusLog "All mount strategies failed - falling back to file-based debloating" "WARNING"
     return $false
 }
 
@@ -580,13 +580,122 @@ try {
         exit 0
     }
     
-    # Step 6: Mount and modify Windows image
+    # Step 6: Mount and modify Windows image OR fallback to file-based debloating
     if (Mount-WindowsImage -WimPath $installWim -ImageIndex $imageIndex -MountDir $mountDir) {
+        Write-StatusLog "WIM mount successful - proceeding with advanced debloating" "SUCCESS"
         Remove-WindowsBloatware -MountDir $mountDir
         Apply-RegistryTweaks -MountDir $mountDir
         Dismount-WindowsImage -MountDir $mountDir -Commit $true
     } else {
-        Write-StatusLog "Failed to mount Windows image - creating unmodified ISO" "WARNING"
+        Write-StatusLog "DISM mount failed - using fallback file-based debloating" "WARNING"
+        
+        # Fallback debloating methods
+        Write-StatusLog "=== FALLBACK DEBLOATING METHODS ===" "WARNING"
+        
+        # Method 1: Remove bloat files directly from ISO structure
+        Write-StatusLog "Removing bloat files from ISO structure..."
+        $bloatFilesToRemove = @(
+            "$tempDir\sources\ei.cfg",
+            "$tempDir\sources\pid.txt", 
+            "$tempDir\autorun.inf"
+        )
+        
+        foreach ($file in $bloatFilesToRemove) {
+            if (Test-Path $file) {
+                Remove-Item $file -Force
+                Write-StatusLog "Removed: $(Split-Path $file -Leaf)" "SUCCESS"
+            }
+        }
+        
+        # Method 2: Remove language packs (keep only en-US)
+        Write-StatusLog "Removing extra language packs..."
+        $langDirs = @("$tempDir\sources\lang", "$tempDir\support\lang")
+        
+        foreach ($langDir in $langDirs) {
+            if (Test-Path $langDir) {
+                Get-ChildItem $langDir | Where-Object { 
+                    $_.Name -notmatch "en-us|en-US" 
+                } | ForEach-Object {
+                    Remove-Item $_.FullName -Recurse -Force
+                    Write-StatusLog "Removed language: $($_.Name)" "SUCCESS"
+                }
+            }
+        }
+        
+        # Method 3: Remove support directories
+        Write-StatusLog "Removing unnecessary support directories..."
+        $supportDirs = @(
+            "$tempDir\support\adfs",
+            "$tempDir\support\logging", 
+            "$tempDir\support\migration",
+            "$tempDir\upgrade"
+        )
+        
+        foreach ($dir in $supportDirs) {
+            if (Test-Path $dir) {
+                $dirSize = (Get-ChildItem $dir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB
+                Remove-Item $dir -Recurse -Force
+                Write-StatusLog "Removed directory: $(Split-Path $dir -Leaf) ($([math]::Round($dirSize, 1)) MB)" "SUCCESS"
+            }
+        }
+        
+        # Method 4: WIM recompression (this usually works even when mounting fails)
+        Write-StatusLog "Attempting WIM recompression..."
+        $originalWimSize = (Get-Item $installWim).Length / 1GB
+        $tempWim = "$tempDir\sources\install_optimized.wim"
+        
+        try {
+            $result = & dism /export-image /sourceimagefile:$installWim /sourceindex:1 /destinationimagefile:$tempWim /compress:max /checkintegrity 2>&1
+            
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $tempWim)) {
+                Remove-Item $installWim -Force
+                Rename-Item $tempWim $installWim
+                
+                $newWimSize = (Get-Item $installWim).Length / 1GB
+                $wimSaved = $originalWimSize - $newWimSize
+                Write-StatusLog "WIM recompressed: $([math]::Round($newWimSize, 2)) GB (saved $([math]::Round($wimSaved, 2)) GB)" "SUCCESS"
+            } else {
+                Write-StatusLog "WIM recompression failed, keeping original" "WARNING"
+                if (Test-Path $tempWim) { Remove-Item $tempWim -Force }
+            }
+        } catch {
+            Write-StatusLog "WIM recompression exception: $($_.Exception.Message)" "WARNING"
+        }
+        
+        # Method 5: Add TPM bypass via autounattend.xml
+        if ($tpmBypass) {
+            Write-StatusLog "Adding TPM bypass via autounattend.xml..."
+            
+            $autounattendPath = "$tempDir\autounattend.xml"
+            $autounattendContent = @'
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+    <settings pass="windowsPE">
+        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <RunSynchronous>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>1</Order>
+                    <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>2</Order>
+                    <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>3</Order>
+                    <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+            </RunSynchronous>
+        </component>
+    </settings>
+</unattend>
+'@
+            
+            $autounattendContent | Out-File -FilePath $autounattendPath -Encoding UTF8
+            Write-StatusLog "Added TPM bypass via autounattend.xml" "SUCCESS"
+        }
+        
+        Write-StatusLog "Fallback debloating completed" "SUCCESS"
     }
     
     # Step 7: Create output ISO

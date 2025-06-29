@@ -143,13 +143,17 @@ jobs:
         Write-Host "✅ Enhanced Error Handling: Enabled"
         Write-Host "✅ Comprehensive Logging: Enabled"
         
-        # Check if robust debloat script exists
-        if (-not (Test-Path "scripts/robust-debloat.ps1")) {
-            Write-Host "❌ Robust debloat script not found!" -ForegroundColor Red
-            Write-Host "Available scripts:"
-            Get-ChildItem scripts -Filter "*.ps1" | ForEach-Object { Write-Host "  $($_.Name)" }
-            exit 1
+        # Check if required debloat scripts exist
+        $requiredScripts = @("scripts/robust-debloat.ps1", "scripts/fallback-debloat.ps1")
+        foreach ($script in $requiredScripts) {
+            if (-not (Test-Path $script)) {
+                Write-Host "❌ Required script not found: $script" -ForegroundColor Red
+                Write-Host "Available scripts:"
+                Get-ChildItem scripts -Filter "*.ps1" | ForEach-Object { Write-Host "  $($_.Name)" }
+                exit 1
+            }
         }
+        Write-Host "✅ All required scripts found"
         
         # Run with all debloat options enabled by default
         $scriptParams = @{
@@ -166,20 +170,78 @@ jobs:
         Write-Host "Parameters: $($scriptParams | ConvertTo-Json -Compress)"
         
         try {
-            # Execute the robust debloat script
-            & "scripts/robust-debloat.ps1" @scriptParams
+            Write-Host "Starting debloat process with 15-minute timeout..."
             
-            $exitCode = $LASTEXITCODE
-            Write-Host "Script exit code: $exitCode"
+            # Start the robust debloat script as a job with timeout
+            $job = Start-Job -ScriptBlock {
+                param($scriptPath, $params)
+                & $scriptPath @params
+            } -ArgumentList "scripts/robust-debloat.ps1", $scriptParams
             
-            if ($exitCode -ne 0) {
-                throw "Debloat script failed with exit code $exitCode"
+            # Wait for job with timeout (15 minutes)
+            $timeout = 900 # 15 minutes in seconds
+            $completed = Wait-Job $job -Timeout $timeout
+            
+            if ($completed) {
+                # Job completed within timeout
+                $output = Receive-Job $job
+                $output | ForEach-Object { Write-Host $_ }
+                
+                $exitCode = if ($job.State -eq "Completed") { 0 } else { 1 }
+                Write-Host "Script exit code: $exitCode"
+                
+                if ($exitCode -ne 0) {
+                    Write-Host "⚠️ Robust script had issues, trying fallback method..." -ForegroundColor Yellow
+                    
+                    # Run fallback script
+                    Write-Host "=== EXECUTING FALLBACK DEBLOAT SCRIPT ==="
+                    & "scripts/fallback-debloat.ps1" @scriptParams
+                    $fallbackExitCode = $LASTEXITCODE
+                    
+                    if ($fallbackExitCode -ne 0) {
+                        throw "Both robust and fallback scripts failed"
+                    }
+                    
+                    Write-Host "✅ Fallback debloat completed successfully!"
+                } else {
+                    Write-Host "✅ Robust debloat completed successfully!"
+                }
+            } else {
+                # Job timed out or is stuck
+                Write-Host "⚠️ Robust script timeout/stuck - killing and using fallback..." -ForegroundColor Yellow
+                
+                # Stop the job
+                Stop-Job $job -Force
+                Remove-Job $job -Force
+                
+                # Kill any stuck DISM processes
+                Get-Process -Name "dism" -ErrorAction SilentlyContinue | Stop-Process -Force
+                
+                # Clean up any stuck mounts
+                & dism /cleanup-wim 2>$null
+                & dism /cleanup-mountpoints 2>$null
+                
+                Write-Host "=== EXECUTING FALLBACK DEBLOAT SCRIPT ==="
+                & "scripts/fallback-debloat.ps1" @scriptParams
+                $fallbackExitCode = $LASTEXITCODE
+                
+                if ($fallbackExitCode -ne 0) {
+                    throw "Fallback script also failed"
+                }
+                
+                Write-Host "✅ Fallback debloat completed successfully!"
             }
             
-            Write-Host "✅ Robust debloat completed successfully!"
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
             
         } catch {
             Write-Host "❌ Error during debloat: $($_.Exception.Message)" -ForegroundColor Red
+            
+            # Final cleanup
+            Get-Process -Name "dism" -ErrorAction SilentlyContinue | Stop-Process -Force
+            & dism /cleanup-wim 2>$null
+            & dism /cleanup-mountpoints 2>$null
+            
             throw
         }
       
