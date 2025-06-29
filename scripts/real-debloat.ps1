@@ -152,6 +152,38 @@ try {
         Write-Host "Original size: $([math]::Round($originalSize,2)) GB"
         Write-Host "Debloated size: $([math]::Round($currentSize,2)) GB"
         Write-Host "Space saved: $([math]::Round($saved,2)) GB ($([math]::Round($saved/$originalSize*100,1))%)"
+        
+        # Show what was actually removed
+        Write-Host ""
+        Write-Host "=== DEBLOAT VERIFICATION ==="
+        Write-Host "Checking what was removed:"
+        
+        $checks = @{
+            "Language packs" = "$dest\sources\lang"
+            "Boot WIM" = "$dest\sources\boot.wim"
+            "Support dir" = "$dest\support"
+            "Setup.exe" = "$dest\setup.exe"
+            "EI.cfg" = "$dest\sources\ei.cfg"
+        }
+        
+        foreach ($item in $checks.GetEnumerator()) {
+            $exists = Test-Path $item.Value
+            $status = if ($exists) { "❌ Still exists" } else { "✅ Removed" }
+            Write-Host "$($item.Key): $status"
+        }
+        
+        # Check language directories if they exist
+        if (Test-Path "$dest\sources\lang") {
+            $langCount = (Get-ChildItem "$dest\sources\lang" | Measure-Object).Count
+            Write-Host "Remaining languages: $langCount"
+        }
+        
+        # Check install.wim compression
+        if (Test-Path "$dest\sources\install.wim") {
+            $wimSize = (Get-Item "$dest\sources\install.wim").Length / 1GB
+            Write-Host "install.wim size: $([math]::Round($wimSize,2)) GB"
+        }
+        
         exit 0
     }
     
