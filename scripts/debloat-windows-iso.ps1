@@ -5,13 +5,15 @@
 param(
     [string]$isoPath = "",
     [string]$winEdition = "",
-    [string]$outputISO = ""
+    [string]$outputISO = "",
+    [switch]$testMode = $false
 )
 
 Write-Host "=== DEBUG: Script Parameters ==="
 Write-Host "isoPath: '$isoPath'"
 Write-Host "winEdition: '$winEdition'"
 Write-Host "outputISO: '$outputISO'"
+Write-Host "testMode: $testMode"
 
 # Check if running as Administrator (but don't exit immediately)
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
@@ -170,8 +172,14 @@ try {
 }
 
 # 2. Check for install.wim or install.esd
+Write-Host "=== KIỂM TRA INSTALL.WIM/INSTALL.ESD ==="
 $wim = Join-Path $dest "sources\install.wim"
 $esd = Join-Path $dest "sources\install.esd"
+
+Write-Host "Checking for install.wim: $wim"
+Write-Host "install.wim exists: $(Test-Path $wim)"
+Write-Host "Checking for install.esd: $esd"
+Write-Host "install.esd exists: $(Test-Path $esd)"
 
 if (-not (Test-Path $wim)) {
     if (Test-Path $esd) {
@@ -179,6 +187,8 @@ if (-not (Test-Path $wim)) {
         try {
             # Convert ESD to WIM using wimlib-imagex
             $wimlibPath = "wimlib-imagex"
+            Write-Host "Attempting to use wimlib-imagex..."
+            
             $result = & $wimlibPath export $esd 1 $wim --compress=LZX:21 2>&1
             $exitCode = $LASTEXITCODE
             
@@ -220,10 +230,12 @@ if (-not (Test-Path $wim)) {
 }
 
 Write-Host "Tìm thấy install.wim: $wim"
+Write-Host "install.wim file size: $((Get-Item $wim).Length / 1GB) GB"
 
 # 3. Get WIM information and count images
 Write-Host "=== LẤY THÔNG TIN WIM ==="
 try {
+    Write-Host "Running DISM get-wiminfo..."
     $wimInfo = & dism /get-wiminfo /wimfile:$wim 2>&1
     $exitCode = $LASTEXITCODE
     
@@ -233,21 +245,25 @@ try {
     
     if ($exitCode -ne 0) {
         Write-Host "LỖI: Không thể lấy thông tin WIM!" -ForegroundColor Red
+        Write-Host "This might be due to corrupted WIM file or insufficient permissions" -ForegroundColor Red
         exit 1
     }
     
     # Count images using correct pattern
-    $imageCount = ($wimInfo | Select-String "Index:").Count
+    $imageLines = $wimInfo | Select-String "Index:"
+    $imageCount = $imageLines.Count
     Write-Host "Số lượng images trong WIM: $imageCount"
     
     if ($imageCount -eq 0) {
         Write-Host "LỖI: Không tìm thấy images nào trong WIM!" -ForegroundColor Red
+        Write-Host "Full WIM info output:" -ForegroundColor Yellow
+        $wimInfo | ForEach-Object { Write-Host "  $_" }
         exit 1
     }
     
     # Show all available editions
     Write-Host "=== CÁC EDITIONS CÓ SẴN ==="
-    $wimInfo | Select-String "Index:" | ForEach-Object {
+    $imageLines | ForEach-Object {
         $line = $_.Line
         $index = [regex]::Match($line, "Index:\s*(\d+)").Groups[1].Value
         $name = [regex]::Match($line, "Name:\s*(.+)").Groups[1].Value
@@ -256,10 +272,19 @@ try {
     
 } catch {
     Write-Host "LỖI: Không thể lấy thông tin WIM! $_" -ForegroundColor Red
+    Write-Host "Exception details: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
+# If in test mode, exit here after WIM info
+if ($testMode) {
+    Write-Host "=== TEST MODE: Exiting after WIM info check ===" -ForegroundColor Green
+    Write-Host "WIM file is valid and contains $imageCount images" -ForegroundColor Green
+    exit 0
+}
+
 # 4. Mount install.wim
+Write-Host "=== MOUNT WIM ==="
 $mountdir = "$env:SystemDrive\WIDTemp\mountdir"
 if (Test-Path $mountdir) { 
     Write-Host "Xóa thư mục mount cũ: $mountdir"
@@ -285,6 +310,7 @@ if ($winEdition) {
 
 Write-Host "Mount WIM image index $imageIndex..."
 try {
+    Write-Host "Running DISM mount-wim..."
     $mountResult = & dism /mount-wim /wimfile:$wim /index:$imageIndex /mountdir:$mountdir 2>&1
     $exitCode = $LASTEXITCODE
     
@@ -294,6 +320,7 @@ try {
     
     if ($exitCode -ne 0) {
         Write-Host "LỖI: Không mount được WIM!" -ForegroundColor Red
+        Write-Host "This might be due to insufficient disk space or corrupted WIM" -ForegroundColor Red
         exit 1
     }
     
@@ -317,38 +344,14 @@ try {
     
 } catch {
     Write-Host "LỖI: Không mount được WIM! $_" -ForegroundColor Red
+    Write-Host "Exception details: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
 # 5. Debloat: Remove AppX, Capabilities, Features, OneDrive, Edge, etc.
-$appx = @(
-    "Microsoft.BingNews*", "Microsoft.BingWeather*", "Microsoft.549981C3F5F10*", "Microsoft.WindowsAlarms*",
-    "Microsoft.WindowsFeedbackHub*", "Microsoft.GetHelp*", "Microsoft.Getstarted*", "Microsoft.WindowsMaps*",
-    "Microsoft.WindowsCommunicationsapps*", "Microsoft.ZuneMusic*", "Microsoft.ZuneVideo*", "Microsoft.Xbox*",
-    "Microsoft.People*", "Microsoft.YourPhone*", "Microsoft.SkypeApp*", "Microsoft.Todos*", "Microsoft.Wallet*"
-)
 Write-Host "=== BẮT ĐẦU DEBLOAT ==="
 
-# Remove AppX packages
-Write-Host "Xóa AppX packages..."
-foreach ($pattern in $appx) {
-    Write-Host "  Đang xóa AppX: $pattern"
-    try {
-        $appxResult = & dism /image:$mountdir /get-provisionedappxpackages 2>&1
-        $appxPackages = $appxResult | Select-String $pattern.Replace("*", "")
-        
-        foreach ($package in $appxPackages) {
-            $packageName = $package.Line.Trim()
-            Write-Host "    Removing: $packageName"
-            $removeResult = & dism /image:$mountdir /remove-provisionedappxpackage /packagename:$packageName 2>&1
-            Write-Host "    Remove result: $($removeResult -join ' ')"
-        }
-    } catch {
-        Write-Host "    Cảnh báo: Không thể xóa $pattern" -ForegroundColor Yellow
-    }
-}
-
-# Remove OneDrive
+# Remove OneDrive first (simpler operation)
 Write-Host "Xóa OneDrive..."
 try {
     Remove-Item "$mountdir\Windows\System32\OneDriveSetup.exe" -Force -ErrorAction SilentlyContinue
@@ -368,7 +371,33 @@ try {
     Write-Host "  Cảnh báo: Không thể xóa Edge" -ForegroundColor Yellow
 }
 
-# Remove Capabilities
+# Remove AppX packages (simplified approach)
+Write-Host "Xóa AppX packages..."
+$appx = @(
+    "Microsoft.BingNews*", "Microsoft.BingWeather*", "Microsoft.549981C3F5F10*", "Microsoft.WindowsAlarms*",
+    "Microsoft.WindowsFeedbackHub*", "Microsoft.GetHelp*", "Microsoft.Getstarted*", "Microsoft.WindowsMaps*",
+    "Microsoft.WindowsCommunicationsapps*", "Microsoft.ZuneMusic*", "Microsoft.ZuneVideo*", "Microsoft.Xbox*",
+    "Microsoft.People*", "Microsoft.YourPhone*", "Microsoft.SkypeApp*", "Microsoft.Todos*", "Microsoft.Wallet*"
+)
+
+foreach ($pattern in $appx) {
+    Write-Host "  Đang xóa AppX: $pattern"
+    try {
+        $appxResult = & dism /image:$mountdir /get-provisionedappxpackages 2>&1
+        $appxPackages = $appxResult | Select-String $pattern.Replace("*", "")
+        
+        foreach ($package in $appxPackages) {
+            $packageName = $package.Line.Trim()
+            Write-Host "    Removing: $packageName"
+            $removeResult = & dism /image:$mountdir /remove-provisionedappxpackage /packagename:$packageName 2>&1
+            Write-Host "    Remove result: $($removeResult -join ' ')"
+        }
+    } catch {
+        Write-Host "    Cảnh báo: Không thể xóa $pattern" -ForegroundColor Yellow
+    }
+}
+
+# Remove Capabilities (simplified)
 Write-Host "Xóa Windows Capabilities..."
 $capabilities = @(
     "App.StepsRecorder*", "Language.Handwriting*", "Language.OCR*", "Language.Speech*", "Language.TextToSpeech*",
@@ -391,7 +420,7 @@ foreach ($cap in $capabilities) {
     }
 }
 
-# Remove Features/Packages
+# Remove Features/Packages (simplified)
 Write-Host "Xóa Windows Features..."
 $features = @(
     "Microsoft-Windows-InternetExplorer-Optional-Package*", "Microsoft-Windows-LanguageFeatures-Handwriting-*",
@@ -419,7 +448,7 @@ foreach ($pkg in $features) {
 
 Write-Host "=== ĐÃ DEBLOAT XONG, BẮT ĐẦU PATCH REGISTRY ==="
 
-# 6. Registry Tweaks (ví dụ: tắt Telemetry, quảng cáo, bypass TPM...)
+# 6. Registry Tweaks (simplified)
 Write-Host "Patch Registry..."
 try {
     reg load HKLM\zSYSTEM "$mountdir\Windows\System32\config\SYSTEM"
@@ -435,6 +464,7 @@ Write-Host "=== UNMOUNT WIM ==="
 
 # 7. Unmount & commit
 try {
+    Write-Host "Running DISM unmount-wim..."
     $unmountResult = & dism /unmount-wim /mountdir:$mountdir /commit 2>&1
     $exitCode = $LASTEXITCODE
     
@@ -444,12 +474,14 @@ try {
     
     if ($exitCode -ne 0) {
         Write-Host "LỖI: Không thể unmount WIM!" -ForegroundColor Red
+        Write-Host "This might be due to file system issues or insufficient permissions" -ForegroundColor Red
         exit 1
     }
     
     Write-Host "=== ĐÃ UNMOUNT WIM THÀNH CÔNG ==="
 } catch {
     Write-Host "LỖI: Không thể unmount WIM! $_" -ForegroundColor Red
+    Write-Host "Exception details: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
 
