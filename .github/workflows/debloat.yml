@@ -3,43 +3,11 @@ name: 🪟 Windows ISO Debloater
 on:
   workflow_dispatch:
     inputs:
-      test_mode:
-        description: 'Test mode (validate only, no ISO creation)'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      win_edition:
-        description: 'Windows Edition (Pro, Home, Enterprise, etc.)'
-        required: false
-        default: 'Pro'
+      source:
+        description: 'Workflow URL hoặc link tải trực tiếp ISO (tự động nhận diện)'
+        required: true
         type: string
-      remove_edge:
-        description: 'Remove Microsoft Edge'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      remove_onedrive:
-        description: 'Remove OneDrive'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      tpm_bypass:
-        description: 'Enable Windows 11 TPM/SecureBoot bypass'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
+        default: 'https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/15851372572'
 
 jobs:
   debloat:
@@ -57,95 +25,141 @@ jobs:
         Write-Host "Available disk space: $([math]::Round((Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace / 1GB, 2)) GB"
         Write-Host "Execution Policy: $(Get-ExecutionPolicy)"
         
-        Write-Host "=== WORKFLOW INPUTS ==="
-        Write-Host "Test Mode: ${{ github.event.inputs.test_mode }}"
-        Write-Host "Windows Edition: ${{ github.event.inputs.win_edition }}"
-        Write-Host "Remove Edge: ${{ github.event.inputs.remove_edge }}"
-        Write-Host "Remove OneDrive: ${{ github.event.inputs.remove_onedrive }}"
-        Write-Host "TPM Bypass: ${{ github.event.inputs.tmp_bypass }}"
+        Write-Host "=== INPUT ==="
+        Write-Host "Source: ${{ github.event.inputs.source }}"
       
-    - name: 📥 Download Windows ISO
+    - name: 📥 Download ISO or Artifact (auto-detect)
+      id: download_iso
+      shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        Write-Host "=== DOWNLOADING WINDOWS ISO ==="
+        $source = "${{ github.event.inputs.source }}"
+        $token = "$env:GITHUB_TOKEN"
         
-        # Download Windows 11 ISO (example URL - replace with actual)
-        $isoUrl = "https://archive.org/download/windows-11-consumer-editions-version-23h2-x64-dvd/en-us_windows_11_consumer_editions_version_23h2_x64_dvd_ce15dcf8.iso"
-        $isoPath = "windows.iso"
+        Write-Host "=== AUTO-DETECTING SOURCE TYPE ==="
+        Write-Host "Source: $source"
         
-        Write-Host "Downloading from: $isoUrl"
-        Write-Host "Saving to: $isoPath"
-        
-        try {
-            # Use WebClient for better progress tracking
-            $webClient = New-Object System.Net.WebClient
-            $webClient.DownloadFile($isoUrl, $isoPath)
-            
-            if (Test-Path $isoPath) {
-                $isoSize = (Get-Item $isoPath).Length / 1GB
-                Write-Host "✅ Download completed successfully"
-                Write-Host "ISO size: $([math]::Round($isoSize, 2)) GB"
+        if ($source -match "github.com/.*/actions/runs/(\d+)") {
+            # GitHub Actions workflow URL
+            if ($source -match "github.com/([^/]+/[^/]+)/actions/runs/(\d+)") {
+                $repo = $matches[1]
+                $runId = $matches[2]
+                Write-Host "✅ Detected GitHub workflow: $repo, run $runId"
+                
+                $artifactsUrl = "https://api.github.com/repos/$repo/actions/runs/$runId/artifacts"
+                $headers = @{ 
+                    Authorization = "Bearer $token"
+                    "X-GitHub-Api-Version" = "2022-11-28"
+                    "User-Agent" = "GitHub-Actions-Workflow"
+                }
+                
+                Write-Host "🔍 Fetching artifacts from: $artifactsUrl"
+                
+                try {
+                    $artifacts = Invoke-RestMethod -Uri $artifactsUrl -Headers $headers
+                    Write-Host "Found $($artifacts.total_count) artifacts"
+                    
+                    # Find Windows ISO artifact
+                    $artifact = $artifacts.artifacts | Where-Object { 
+                        $_.name -match "windows|iso" -or $_.size_in_bytes -gt 3GB 
+                    } | Sort-Object size_in_bytes -Descending | Select-Object -First 1
+                    
+                    if (-not $artifact) {
+                        $artifact = $artifacts.artifacts | Sort-Object size_in_bytes -Descending | Select-Object -First 1
+                    }
+                    
+                    if (-not $artifact) { 
+                        throw "No suitable artifacts found in workflow"
+                    }
+                    
+                    Write-Host "📦 Selected artifact: $($artifact.name) ($([math]::Round($artifact.size_in_bytes / 1GB, 2)) GB)"
+                    
+                    # Download artifact
+                    Write-Host "⬇️ Downloading artifact..."
+                    $webClient = New-Object System.Net.WebClient
+                    $webClient.Headers.Add("Authorization", "Bearer $token")
+                    $webClient.Headers.Add("User-Agent", "GitHub-Actions-Workflow")
+                    $webClient.DownloadFile($artifact.archive_download_url, "artifact.zip")
+                    
+                    Write-Host "📂 Extracting artifact..."
+                    Expand-Archive artifact.zip -DestinationPath artifact -Force
+                    
+                    # Find ISO in artifact
+                    $iso = Get-ChildItem artifact -Recurse -Filter *.iso | Select-Object -First 1
+                    if (-not $iso) {
+                        throw "No ISO file found in artifact"
+                    }
+                    
+                    Copy-Item $iso.FullName windows.iso -Force
+                    Write-Host "✅ ISO extracted: $($iso.Name)"
+                    
+                    # Cleanup
+                    Remove-Item artifact.zip -Force -ErrorAction SilentlyContinue
+                    Remove-Item artifact -Recurse -Force -ErrorAction SilentlyContinue
+                    
+                } catch {
+                    Write-Host "❌ Failed to download from workflow: $($_.Exception.Message)" -ForegroundColor Red
+                    throw
+                }
             } else {
-                throw "ISO file not found after download"
+                throw "Invalid GitHub workflow URL format"
             }
-        } catch {
-            Write-Host "❌ Download failed: $($_.Exception.Message)" -ForegroundColor Red
+        } else {
+            # Direct download URL
+            Write-Host "✅ Detected direct download URL"
+            Write-Host "⬇️ Downloading ISO directly..."
             
-            # Fallback: Try with Invoke-WebRequest
-            Write-Host "Trying alternative download method..."
-            Invoke-WebRequest -Uri $isoUrl -OutFile $isoPath -UseBasicParsing
-            
-            if (Test-Path $isoPath) {
-                $isoSize = (Get-Item $isoPath).Length / 1GB
-                Write-Host "✅ Fallback download successful"
-                Write-Host "ISO size: $([math]::Round($isoSize, 2)) GB"
-            } else {
-                Write-Host "❌ All download methods failed" -ForegroundColor Red
-                exit 1
+            try {
+                $webClient = New-Object System.Net.WebClient
+                $webClient.DownloadFile($source, "windows.iso")
+                Write-Host "✅ Direct download completed"
+            } catch {
+                Write-Host "❌ Direct download failed, trying Invoke-WebRequest..." -ForegroundColor Yellow
+                Invoke-WebRequest -Uri $source -OutFile "windows.iso" -UseBasicParsing
+                Write-Host "✅ Fallback download completed"
             }
         }
-      
-    - name: 🧹 Run Windows ISO Debloater
+        
+        # Verify ISO
+        if (Test-Path "windows.iso") {
+            $fileSize = (Get-Item "windows.iso").Length / 1GB
+            Write-Host "🎯 ISO ready: $([math]::Round($fileSize,2)) GB"
+            
+            if ($fileSize -lt 3) {
+                Write-Host "⚠️ Warning: ISO size seems small, might not be a complete Windows ISO" -ForegroundColor Yellow
+            }
+        } else {
+            throw "ISO download failed - file not found"
+        }
+
+    - name: 🧹 Run Proper Debloat (with defaults)
       run: |
-        Write-Host "=== STARTING PROPER DEBLOAT PROCESS ==="
+        Write-Host "=== STARTING PROPER DEBLOAT WITH DEFAULTS ==="
+        Write-Host "✅ Remove Edge: Enabled (default)"
+        Write-Host "✅ Remove OneDrive: Enabled (default)" 
+        Write-Host "✅ Hardware Bypass: Enabled (default)"
+        Write-Host "✅ Privacy Tweaks: Enabled (default)"
         
-        # Parse input parameters
-        $testMode = "${{ github.event.inputs.test_mode }}" -eq "true"
-        $winEdition = "${{ github.event.inputs.win_edition }}"
-        $removeEdge = "${{ github.event.inputs.remove_edge }}" -ne "false"
-        $removeOneDrive = "${{ github.event.inputs.remove_onedrive }}" -ne "false"
-        $tmpBypass = "${{ github.event.inputs.tpm_bypass }}" -eq "true"
+        # Check if proper debloat script exists
+        if (-not (Test-Path "scripts/proper-debloat.ps1")) {
+            Write-Host "❌ Proper debloat script not found!" -ForegroundColor Red
+            Write-Host "Available scripts:"
+            Get-ChildItem scripts -Filter "*.ps1" | ForEach-Object { Write-Host "  $($_.Name)" }
+            exit 1
+        }
         
-        Write-Host "Parsed parameters:"
-        Write-Host "  Test Mode: $testMode"
-        Write-Host "  Windows Edition: $winEdition"
-        Write-Host "  Remove Edge: $removeEdge"
-        Write-Host "  Remove OneDrive: $removeOneDrive"
-        Write-Host "  TPM Bypass: $tmpBypass"
-        
-        # Build parameters for script
+        # Run with all debloat options enabled by default
         $scriptParams = @{
             isoPath = "windows.iso"
             outputISO = "debloated-windows.iso"
-            testMode = $testMode
+            removeEdge = $true
+            removeOneDrive = $true
+            tpmBypass = $true
+            testMode = $false
         }
         
-        if ($winEdition) {
-            $scriptParams.winEdition = $winEdition
-        }
-        
-        if (-not $removeEdge) {
-            $scriptParams.removeEdge = $false
-        }
-        
-        if (-not $removeOneDrive) {
-            $scriptParams.removeOneDrive = $false
-        }
-        
-        if ($tmpBypass) {
-            $scriptParams.tmpBypass = $true
-        }
-        
-        Write-Host "=== EXECUTING DEBLOAT SCRIPT ==="
+        Write-Host "=== EXECUTING PROPER DEBLOAT SCRIPT ==="
         Write-Host "Script: scripts/proper-debloat.ps1"
         Write-Host "Parameters: $($scriptParams | ConvertTo-Json -Compress)"
         
@@ -160,33 +174,18 @@ jobs:
                 throw "Debloat script failed with exit code $exitCode"
             }
             
-            Write-Host "✅ Debloat process completed successfully!"
+            Write-Host "✅ Proper debloat completed successfully!"
             
         } catch {
-            Write-Host "❌ Error during debloat process: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "❌ Error during debloat: $($_.Exception.Message)" -ForegroundColor Red
             throw
         }
       
-    - name: 📊 Display Results
+    - name: 📊 Show Results
       run: |
-        $testMode = "${{ github.event.inputs.test_mode }}" -eq "true"
-        $isoCreated = Test-Path "debloated-windows.iso"
-        
         Write-Host "=== DEBLOAT RESULTS ==="
         
-        if ($testMode) {
-            Write-Host "✅ Test Mode: Validation completed successfully"
-            Write-Host "   - ISO structure is valid"
-            Write-Host "   - Windows editions detected"
-            Write-Host "   - Ready for actual debloating"
-            
-            echo "## 🧪 Test Completed Successfully ✅" >> $env:GITHUB_STEP_SUMMARY
-            echo "" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ISO structure is valid and ready for debloating" >> $env:GITHUB_STEP_SUMMARY
-            echo "- Windows editions detected and analyzed" >> $env:GITHUB_STEP_SUMMARY
-            echo "- All components verified successfully" >> $env:GITHUB_STEP_SUMMARY
-            
-        } elseif ($isoCreated) {
+        if (Test-Path "debloated-windows.iso") {
             $originalISO = Get-Item "windows.iso"
             $debloatedISO = Get-Item "debloated-windows.iso"
             
@@ -195,48 +194,48 @@ jobs:
             $savedSpace = $originalSize - $debloatedSize
             $percentage = ($savedSpace / $originalSize) * 100
             
-            Write-Host "✅ Debloated ISO created successfully!"
-            Write-Host "   Original size: $([math]::Round($originalSize, 2)) GB"
-            Write-Host "   Debloated size: $([math]::Round($debloatedSize, 2)) GB"
-            Write-Host "   Space saved: $([math]::Round($savedSpace, 2)) GB ($([math]::Round($percentage, 1))%)"
+            Write-Host "🎯 Debloated ISO created successfully!"
+            Write-Host "📊 Original size: $([math]::Round($originalSize, 2)) GB"
+            Write-Host "📊 Debloated size: $([math]::Round($debloatedSize, 2)) GB"
+            Write-Host "💾 Space saved: $([math]::Round($savedSpace, 2)) GB ($([math]::Round($percentage, 1))%)"
             
-            echo "## 🎯 Debloat Completed Successfully ✅" >> $env:GITHUB_STEP_SUMMARY
+            # Create summary
+            echo "## 🎯 Windows ISO Debloated Successfully ✅" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
-            echo "### 📊 Size Comparison" >> $env:GITHUB_STEP_SUMMARY
+            echo "### 📊 Size Comparison" >> $env:GITHUB_STEP_SUMMARY  
             echo "- **Original ISO**: $([math]::Round($originalSize, 2)) GB" >> $env:GITHUB_STEP_SUMMARY
             echo "- **Debloated ISO**: $([math]::Round($debloatedSize, 2)) GB" >> $env:GITHUB_STEP_SUMMARY
             echo "- **Space Saved**: $([math]::Round($savedSpace, 2)) GB ($([math]::Round($percentage, 1))%)" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
-            echo "### 🗑️ Components Removed" >> $env:GITHUB_STEP_SUMMARY
-            echo "- Microsoft Store bloatware apps" >> $env:GITHUB_STEP_SUMMARY
-            echo "- Unnecessary Windows capabilities" >> $env:GITHUB_STEP_SUMMARY
-            echo "- Privacy-invasive telemetry components" >> $env:GITHUB_STEP_SUMMARY
-            if ("${{ github.event.inputs.remove_edge }}" -ne "false") {
-                echo "- Microsoft Edge browser" >> $env:GITHUB_STEP_SUMMARY
-            }
-            if ("${{ github.event.inputs.remove_onedrive }}" -ne "false") {
-                echo "- OneDrive integration" >> $env:GITHUB_STEP_SUMMARY  
-            }
-            if ("${{ github.event.inputs.tmp_bypass }}" -eq "true") {
-                echo "- Windows 11 TPM/SecureBoot checks bypassed" >> $env:GITHUB_STEP_SUMMARY
-            }
+            echo "### 🗑️ Components Removed (Default Settings)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ Microsoft Store bloatware apps (Candy Crush, TikTok, etc.)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ Microsoft Edge browser" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ OneDrive integration" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ Windows capabilities (WordPad, Media Player, etc.)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ Privacy-invasive telemetry components" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ Windows 11 TPM/SecureBoot checks bypassed" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
-            echo "📥 **Download the debloated ISO from the artifacts below**" >> $env:GITHUB_STEP_SUMMARY
+            echo "### 🚀 What's Preserved" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **setup.exe** - Installation capability maintained" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **boot.wim** - Boot functionality preserved" >> $env:GITHUB_STEP_SUMMARY  
+            echo "- ✅ **Boot files** - System can start properly" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Core Windows** - All essential components intact" >> $env:GITHUB_STEP_SUMMARY
+            echo "" >> $env:GITHUB_STEP_SUMMARY
+            echo "📥 **Download the debloated ISO from artifacts below**" >> $env:GITHUB_STEP_SUMMARY
             
         } else {
-            Write-Host "⚠️ Process completed but no ISO was created"
-            Write-Host "   This might happen in test mode or if there was an error"
+            Write-Host "❌ No debloated ISO was created" -ForegroundColor Red
             
-            echo "## ⚠️ Process Completed" >> $env:GITHUB_STEP_SUMMARY
-            echo "Script executed but no debloated ISO was created." >> $env:GITHUB_STEP_SUMMARY
-            echo "This typically happens in test mode or due to configuration issues." >> $env:GITHUB_STEP_SUMMARY
+            echo "## ❌ Debloat Process Failed" >> $env:GITHUB_STEP_SUMMARY
+            echo "The debloat script completed but no ISO was generated." >> $env:GITHUB_STEP_SUMMARY
+            echo "Check the logs above for detailed error information." >> $env:GITHUB_STEP_SUMMARY
         }
       
     - name: 📤 Upload Debloated ISO
-      if: success() && github.event.inputs.test_mode != 'true'
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: debloated-windows-iso
         path: debloated-windows.iso
         retention-days: 7
-        compression-level: 0  # ISO is already compressed 
+        compression-level: 0 
