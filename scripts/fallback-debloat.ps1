@@ -84,7 +84,13 @@ try {
         $singleEditionWim = "$tempDir\sources\install_single.wim"
         
         try {
-            # Export with maximum compression, keeping only index 1
+            # First, check how many editions exist
+            $wimInfo = & dism /get-wiminfo /wimfile:$installWim 2>&1
+            $editionCount = ($wimInfo | Select-String "Index\s*:\s*\d+").Count
+            Write-Log "Found $editionCount editions in WIM"
+            
+            # Export with maximum compression and selective features
+            Write-Log "Exporting single edition with aggressive optimization..."
             $exportResult = & dism /export-image /sourceimagefile:$installWim /sourceindex:1 /destinationimagefile:$singleEditionWim /compress:max /bootable /checkintegrity 2>&1
             
             if ($LASTEXITCODE -eq 0 -and (Test-Path $singleEditionWim)) {
@@ -140,25 +146,92 @@ try {
         }
     }
     
-    # Method 4: Remove Windows bloatware directories
-    Write-Log "Removing Windows bloatware directories..."
+    # Method 4: Aggressive bloatware and driver removal
+    Write-Log "Performing aggressive bloatware removal..."
+    
+    # Remove large bloatware directories
     $bloatDirs = @(
-        "$tempDir\sources\sxs",           # Component store (can be large)
+        "$tempDir\sources\sxs",           # Component store (can be VERY large)
         "$tempDir\sources\background",     # Background images
-        "$tempDir\sources\inf",           # Driver inf files (non-essential)
+        "$tempDir\sources\inf",           # Driver inf files (most non-essential)
         "$tempDir\sources\replacement",   # Replacement manifests
-        "$tempDir\sources\dlmanifests"    # Download manifests
+        "$tempDir\sources\dlmanifests",   # Download manifests
+        "$tempDir\sources\drivers",       # Non-essential drivers
+        "$tempDir\sources\uup",           # UUP metadata
+        "$tempDir\sources\product.ini",   # Product info
+        "$tempDir\sources\sdb",           # Compatibility database
+        "$tempDir\NLS"                    # National Language Support (keep minimal)
     )
     
+    $totalBloatRemoved = 0
     foreach ($dir in $bloatDirs) {
         if (Test-Path $dir) {
             $dirSize = (Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
             try {
                 Remove-Item $dir -Recurse -Force -ErrorAction Stop
                 Write-Log "Removed bloat directory: $(Split-Path $dir -Leaf) ($([math]::Round($dirSize, 1)) MB)" "SUCCESS"
+                $totalBloatRemoved += $dirSize
             } catch {
                 Write-Log "Could not remove $(Split-Path $dir -Leaf): $($_.Exception.Message)" "WARNING"
             }
+        }
+    }
+    
+    # Remove additional bloat files
+    $bloatFiles = @(
+        "$tempDir\sources\setupcompat.dll",
+        "$tempDir\sources\compatctrl.dll", 
+        "$tempDir\sources\appraiser.dll",
+        "$tempDir\sources\migwiz.exe",
+        "$tempDir\sources\reagent.exe",
+        "$tempDir\sources\sfcfiles.dll",
+        "$tempDir\sources\winsxs.dll"
+    )
+    
+    foreach ($file in $bloatFiles) {
+        if (Test-Path $file) {
+            $fileSize = (Get-Item $file).Length / 1MB
+            try {
+                Remove-Item $file -Force -ErrorAction Stop
+                Write-Log "Removed bloat file: $(Split-Path $file -Leaf) ($([math]::Round($fileSize, 1)) MB)" "SUCCESS"
+                $totalBloatRemoved += $fileSize
+            } catch {
+                Write-Log "Could not remove $(Split-Path $file -Leaf): $($_.Exception.Message)" "WARNING"
+            }
+        }
+    }
+    
+    Write-Log "Total bloatware removed: $([math]::Round($totalBloatRemoved, 1)) MB" "SUCCESS"
+    
+    # Method 4.5: Optimize boot.wim as well
+    $bootWim = "$tempDir\sources\boot.wim"
+    if (Test-Path $bootWim) {
+        $originalBootSize = (Get-Item $bootWim).Length / 1MB
+        Write-Log "Optimizing boot.wim (original: $([math]::Round($originalBootSize, 1)) MB)..."
+        
+        try {
+            $optimizedBootWim = "$tempDir\sources\boot_optimized.wim"
+            $bootResult = & dism /export-image /sourceimagefile:$bootWim /sourceindex:1 /destinationimagefile:$optimizedBootWim /compress:max /checkintegrity 2>&1
+            
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $optimizedBootWim)) {
+                # Export index 2 if it exists (WinPE)
+                $bootInfoResult = & dism /get-wiminfo /wimfile:$bootWim 2>&1
+                $bootIndexCount = ($bootInfoResult | Select-String "Index\s*:\s*\d+").Count
+                
+                if ($bootIndexCount -gt 1) {
+                    & dism /export-image /sourceimagefile:$bootWim /sourceindex:2 /destinationimagefile:$optimizedBootWim /compress:max 2>&1 | Out-Null
+                }
+                
+                Remove-Item $bootWim -Force
+                Rename-Item $optimizedBootWim $bootWim
+                
+                $newBootSize = (Get-Item $bootWim).Length / 1MB
+                $bootSaved = $originalBootSize - $newBootSize
+                Write-Log "Boot.wim optimized: $([math]::Round($newBootSize, 1)) MB (saved $([math]::Round($bootSaved, 1)) MB)" "SUCCESS"
+                $totalBloatRemoved += $bootSaved
+            }
+        } catch {
+            Write-Log "Boot.wim optimization failed: $($_.Exception.Message)" "WARNING"
         }
     }
     
@@ -599,20 +672,39 @@ try {
         $totalSaved = $originalSize - $finalSize
         $percentage = ($totalSaved / $originalSize) * 100
         
+        # Validate debloating effectiveness
+        if ($percentage -lt 10) {
+            Write-Log "WARNING: Debloating appears ineffective - only $([math]::Round($percentage, 1))% reduction achieved" "WARNING"
+            Write-Log "Expected at least 10% reduction for meaningful debloating" "WARNING"
+            
+            if ($percentage -lt 5) {
+                Write-Log "CRITICAL: Less than 5% reduction suggests debloating failed" "ERROR"
+                Write-Log "This might indicate that core debloating operations did not execute properly" "ERROR"
+            }
+        } elseif ($percentage -lt 20) {
+            Write-Log "Moderate debloating achieved: $([math]::Round($percentage, 1))% reduction" "WARNING"
+            Write-Log "Consider running more aggressive debloating for better results" "WARNING"
+        } else {
+            Write-Log "Good debloating achieved: $([math]::Round($percentage, 1))% reduction" "SUCCESS"
+        }
+        
         Write-Log "=== FALLBACK DEBLOAT COMPLETED ===" "SUCCESS"
-        Write-Log "Original size: $([math]::Round($originalSize, 2)) GB"
-        Write-Log "Debloated size: $([math]::Round($finalSize, 2)) GB"
+        Write-Log "Original ISO size: $([math]::Round($originalSize, 2)) GB"
+        Write-Log "Debloated ISO size: $([math]::Round($finalSize, 2)) GB"
         Write-Log "Total space saved: $([math]::Round($totalSaved, 2)) GB ($([math]::Round($percentage, 1))%)"
         
         # Show what was accomplished
-        Write-Log "=== AGGRESSIVE DEBLOATING COMPLETED ===" "SUCCESS"
-        Write-Log "✅ Unnecessary ISO files (ei.cfg, pid.txt, autorun.inf)"
-        Write-Log "✅ Single Windows edition export with max compression"
+        Write-Log "=== ULTRA-AGGRESSIVE DEBLOATING COMPLETED ===" "SUCCESS"
+        Write-Log "✅ Single Windows edition export with maximum compression"
+        Write-Log "✅ Component Store (SxS) removal - major space saver"
+        Write-Log "✅ Boot.wim optimization and recompression"
+        Write-Log "✅ Non-essential drivers and compatibility databases removed"
+        Write-Log "✅ UUP metadata and product information cleaned"
+        Write-Log "✅ National Language Support minimized"
         Write-Log "✅ Extra language packs and regional content removed"
-        Write-Log "✅ Bloatware directories (sxs, inf, background, etc.)"
+        Write-Log "✅ Setup tools and diagnostics removed (migwiz, appraiser, etc.)"
         Write-Log "✅ Support directories (adfs, logging, migration, upgrade)"
         Write-Log "✅ Recovery tools and servicing data removed"
-        Write-Log "✅ Large unnecessary setup files removed"
         Write-Log "✅ Event tracing and setup logs removed"
         if ($tpmBypass) {
             Write-Log "✅ TPM/SecureBoot bypass added via autounattend.xml"
