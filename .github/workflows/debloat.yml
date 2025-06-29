@@ -89,10 +89,10 @@ jobs:
               exit 1
           }
 
-      - name: Run Simple Debloat
+      - name: Run Real Debloat
         shell: pwsh
         run: |
-          Write-Host "=== STARTING SIMPLE DEBLOAT ==="
+          Write-Host "=== STARTING REAL DEBLOAT ==="
           
           $testMode = "${{ github.event.inputs.test_mode }}" -eq "true"
           Write-Host "Test mode: $testMode"
@@ -101,13 +101,13 @@ jobs:
           Write-Host "Files in current directory:"
           Get-ChildItem | ForEach-Object { Write-Host "  $($_.Name)" }
           
-          # Run the simple script
-          Write-Host "Executing simple debloat script..."
+          # Run the real debloat script
+          Write-Host "Executing REAL debloat script..."
           
           if ($testMode) {
-              .\scripts\simple-debloat.ps1 -isoPath "windows.iso" -outputISO "debloated-windows.iso" -testMode
+              .\scripts\real-debloat.ps1 -isoPath "windows.iso" -outputISO "debloated-windows.iso" -testMode
           } else {
-              .\scripts\simple-debloat.ps1 -isoPath "windows.iso" -outputISO "debloated-windows.iso"
+              .\scripts\real-debloat.ps1 -isoPath "windows.iso" -outputISO "debloated-windows.iso"
           }
           
           $exitCode = $LASTEXITCODE
