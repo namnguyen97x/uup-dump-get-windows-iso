@@ -178,14 +178,33 @@ jobs:
             Write-Host "⚠️ Autounattend profile not found - will be generated during processing" -ForegroundColor Yellow
         }
         
-        # Windows Lite processing parameters
+        # Windows Lite processing parameters with absolute paths
+        $currentDir = Get-Location
         $windowsLiteParams = @{
-            isoPath = "windows.iso"
-            outputISO = "windows-lite.iso"
+            isoPath = Join-Path $currentDir "windows.iso"
+            outputISO = Join-Path $currentDir "windows-lite.iso"
             removeEdge = $true
             removeOneDrive = $true
             tpmBypass = $true
             testMode = $false
+        }
+        
+        Write-Host "Using absolute paths:" -ForegroundColor Cyan
+        Write-Host "  ISO Path: $($windowsLiteParams.isoPath)" -ForegroundColor Yellow
+        Write-Host "  Output Path: $($windowsLiteParams.outputISO)" -ForegroundColor Yellow
+        
+        # Final verification before starting job
+        Write-Host "=== PRE-JOB VERIFICATION ===" -ForegroundColor Cyan
+        Write-Host "Current directory: $currentDir" -ForegroundColor Yellow
+        Write-Host "ISO file exists: $(Test-Path $windowsLiteParams.isoPath)" -ForegroundColor $(if (Test-Path $windowsLiteParams.isoPath) { "Green" } else { "Red" })
+        if (Test-Path $windowsLiteParams.isoPath) {
+            $isoInfo = Get-Item $windowsLiteParams.isoPath
+            Write-Host "ISO size: $([math]::Round($isoInfo.Length / 1GB, 2)) GB" -ForegroundColor Green
+        } else {
+            Write-Host "❌ CRITICAL: ISO file not found before starting job!" -ForegroundColor Red
+            Write-Host "Available files:" -ForegroundColor Yellow
+            Get-ChildItem . | ForEach-Object { Write-Host "  $($_.Name)" -ForegroundColor Yellow }
+            throw "ISO file not found before starting Windows Lite processing"
         }
         
         Write-Host "=== EXECUTING WINDOWS LITE PROCESSING ===" -ForegroundColor Cyan
@@ -199,16 +218,22 @@ jobs:
             
             # Start the Windows Lite processing script as a job with timeout
             $job = Start-Job -ScriptBlock {
-                param($scriptPath, $params)
+                param($scriptPath, $params, $workingDir)
                 
                 # Set execution policy for the job
                 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+                
+                # Change to the correct working directory
+                Set-Location $workingDir
+                Write-Host "Job working directory: $(Get-Location)"
+                Write-Host "Job ISO path: $($params.isoPath)"
+                Write-Host "Job ISO exists: $(Test-Path $params.isoPath)"
                 
                 # Execute Windows Lite processing
                 & $scriptPath @params
                 
                 return $LASTEXITCODE
-            } -ArgumentList $windowsLiteScript, $windowsLiteParams
+            } -ArgumentList $windowsLiteScript, $windowsLiteParams, $currentDir
             
             # Wait for job with extended timeout (20 minutes for large ISOs)
             $timeout = 1200 # 20 minutes in seconds

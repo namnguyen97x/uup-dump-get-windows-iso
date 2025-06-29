@@ -107,7 +107,52 @@ function Test-DismSuccess {
 
 Write-Log "=== WINDOWS LITE PROCESSING v4.0 - EFFECTIVENESS FOCUSED ===" "SUCCESS"
 
+# Debug: Show current working directory and environment
+Write-Log "Current working directory: $(Get-Location)" "INFO"
+Write-Log "Script parameters:" "INFO"
+Write-Log "  isoPath: $isoPath" "INFO"
+Write-Log "  outputISO: $outputISO" "INFO"
+
+# Validate ISO file exists
+if (-not (Test-Path $isoPath)) {
+    Write-Log "❌ CRITICAL ERROR: ISO file not found at: $isoPath" "ERROR"
+    Write-Log "Current directory: $(Get-Location)" "ERROR"
+    Write-Log "Looking for files..." "INFO"
+    
+    Write-Log "ISO files in current directory:" "INFO"
+    $isoFiles = Get-ChildItem . -Filter "*.iso" -ErrorAction SilentlyContinue
+    if ($isoFiles) {
+        $isoFiles | ForEach-Object { Write-Log "  Found ISO: $($_.Name) ($([math]::Round($_.Length / 1GB, 2)) GB)" "SUCCESS" }
+    } else {
+        Write-Log "  No ISO files found in current directory" "WARNING"
+    }
+    
+    Write-Log "All files in current directory:" "INFO"  
+    Get-ChildItem . -ErrorAction SilentlyContinue | ForEach-Object { 
+        $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
+        Write-Log "  $($_.Name) ($size)" "INFO" 
+    }
+    
+    # Try to find the ISO file with common names
+    $commonIsoNames = @("windows.iso", "*.iso")
+    foreach ($pattern in $commonIsoNames) {
+        $found = Get-ChildItem . -Filter $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) {
+            Write-Log "🔍 FOUND potential ISO: $($found.Name)" "SUCCESS"
+            Write-Log "Updating isoPath to: $($found.FullName)" "SUCCESS"
+            $script:isoPath = $found.FullName
+            break
+        }
+    }
+    
+    # Final check
+    if (-not (Test-Path $isoPath)) {
+        throw "ISO file not found: $isoPath"
+    }
+}
+
 $isoSize = (Get-Item $isoPath).Length / 1GB
+Write-Log "✅ ISO file validated: $isoPath ($([math]::Round($isoSize, 2)) GB)" "SUCCESS"
 Write-Log "Target: $([math]::Round($isoSize, 2)) GB → 3-4GB (30-40% reduction)" "SUCCESS"
 
 $tempDir = "$env:TEMP\WinLite_$(Get-Random)"
@@ -117,11 +162,38 @@ New-Item -ItemType Directory -Path $tempDir, $mountDir, $extractDir -Force | Out
 
 try {
     # === EXTRACT ISO ===
-    Write-Log "Extracting ISO..." "INFO"
-    $mounted = Mount-DiskImage -ImagePath $isoPath -PassThru
+    Write-Log "Mounting ISO file: $isoPath" "INFO"
+    
+    try {
+        $mounted = Mount-DiskImage -ImagePath $isoPath -PassThru -ErrorAction Stop
+        if (-not $mounted) {
+            throw "Mount-DiskImage returned null result"
+        }
+        Write-Log "✅ ISO mounted successfully" "SUCCESS"
+    } catch {
+        Write-Log "❌ FAILED to mount ISO: $($_.Exception.Message)" "ERROR"
+        Write-Log "ISO path: $isoPath" "ERROR"
+        Write-Log "ISO exists: $(Test-Path $isoPath)" "ERROR"
+        if (Test-Path $isoPath) {
+            $isoInfo = Get-Item $isoPath
+            Write-Log "ISO size: $([math]::Round($isoInfo.Length / 1MB, 2)) MB" "ERROR"
+            Write-Log "ISO creation time: $($isoInfo.CreationTime)" "ERROR"
+        }
+        throw
+    }
+    
     $drive = ($mounted | Get-Volume).DriveLetter
-    Copy-Item "$($drive):\*" $extractDir -Recurse -Force
-    Dismount-DiskImage -ImagePath $isoPath
+    if (-not $drive) {
+        throw "Failed to get drive letter from mounted ISO"
+    }
+    Write-Log "✅ ISO mounted to drive $drive" "SUCCESS"
+    
+    Write-Log "Extracting ISO contents to: $extractDir" "INFO"
+    Copy-Item "$($drive):\*" $extractDir -Recurse -Force -ErrorAction Stop
+    Write-Log "✅ ISO contents extracted" "SUCCESS"
+    
+    Write-Log "Dismounting ISO..." "INFO"
+    Dismount-DiskImage -ImagePath $isoPath -ErrorAction Stop
     
     # === BIGGEST SPACE SAVER: SINGLE EDITION EXPORT ===
     $installWim = "$extractDir\sources\install.wim"
