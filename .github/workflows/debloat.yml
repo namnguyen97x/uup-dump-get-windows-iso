@@ -133,17 +133,19 @@ jobs:
             throw "ISO download failed - file not found"
         }
 
-    - name: 🧹 Run Proper Debloat (with defaults)
+    - name: 🧹 Run Robust Debloat (with defaults)
       run: |
-        Write-Host "=== STARTING PROPER DEBLOAT WITH DEFAULTS ==="
+        Write-Host "=== STARTING ROBUST DEBLOAT WITH DEFAULTS ==="
         Write-Host "✅ Remove Edge: Enabled (default)"
         Write-Host "✅ Remove OneDrive: Enabled (default)" 
         Write-Host "✅ Hardware Bypass: Enabled (default)"
         Write-Host "✅ Privacy Tweaks: Enabled (default)"
+        Write-Host "✅ Enhanced Error Handling: Enabled"
+        Write-Host "✅ Comprehensive Logging: Enabled"
         
-        # Check if proper debloat script exists
-        if (-not (Test-Path "scripts/proper-debloat.ps1")) {
-            Write-Host "❌ Proper debloat script not found!" -ForegroundColor Red
+        # Check if robust debloat script exists
+        if (-not (Test-Path "scripts/robust-debloat.ps1")) {
+            Write-Host "❌ Robust debloat script not found!" -ForegroundColor Red
             Write-Host "Available scripts:"
             Get-ChildItem scripts -Filter "*.ps1" | ForEach-Object { Write-Host "  $($_.Name)" }
             exit 1
@@ -159,13 +161,13 @@ jobs:
             testMode = $false
         }
         
-        Write-Host "=== EXECUTING PROPER DEBLOAT SCRIPT ==="
-        Write-Host "Script: scripts/proper-debloat.ps1"
+        Write-Host "=== EXECUTING ROBUST DEBLOAT SCRIPT ==="
+        Write-Host "Script: scripts/robust-debloat.ps1"
         Write-Host "Parameters: $($scriptParams | ConvertTo-Json -Compress)"
         
         try {
-            # Execute the proper debloat script
-            & "scripts/proper-debloat.ps1" @scriptParams
+            # Execute the robust debloat script
+            & "scripts/robust-debloat.ps1" @scriptParams
             
             $exitCode = $LASTEXITCODE
             Write-Host "Script exit code: $exitCode"
@@ -174,7 +176,7 @@ jobs:
                 throw "Debloat script failed with exit code $exitCode"
             }
             
-            Write-Host "✅ Proper debloat completed successfully!"
+            Write-Host "✅ Robust debloat completed successfully!"
             
         } catch {
             Write-Host "❌ Error during debloat: $($_.Exception.Message)" -ForegroundColor Red
@@ -220,6 +222,13 @@ jobs:
             echo "- ✅ **boot.wim** - Boot functionality preserved" >> $env:GITHUB_STEP_SUMMARY  
             echo "- ✅ **Boot files** - System can start properly" >> $env:GITHUB_STEP_SUMMARY
             echo "- ✅ **Core Windows** - All essential components intact" >> $env:GITHUB_STEP_SUMMARY
+            echo "" >> $env:GITHUB_STEP_SUMMARY
+            echo "### 🔧 Robust Features" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Enhanced error handling** with fallback mechanisms" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Comprehensive logging** for troubleshooting" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Multiple mount strategies** for better compatibility" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Disk space validation** and environment checks" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Graceful degradation** when some operations fail" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
             echo "📥 **Download the debloated ISO from artifacts below**" >> $env:GITHUB_STEP_SUMMARY
             
