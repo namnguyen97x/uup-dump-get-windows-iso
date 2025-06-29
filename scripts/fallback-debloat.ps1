@@ -108,10 +108,20 @@ function Test-DismSuccess {
 Write-Log "=== WINDOWS LITE PROCESSING v4.0 - EFFECTIVENESS FOCUSED ===" "SUCCESS"
 
 # Debug: Show current working directory and environment
-Write-Log "Current working directory: $(Get-Location)" "INFO"
-Write-Log "Script parameters:" "INFO"
+Write-Log "STARTUP DIAGNOSTICS:" "INFO"
+Write-Log "  PowerShell Version: $($PSVersionTable.PSVersion)" "INFO"
+Write-Log "  Execution Policy: $(Get-ExecutionPolicy)" "INFO"
+Write-Log "  Current User: $($env:USERNAME)" "INFO"
+Write-Log "  Current working directory: $(Get-Location)" "INFO"
+Write-Log "  Available disk space: $([math]::Round((Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$((Get-Location).Drive.Name)'").FreeSpace / 1GB, 2)) GB" "INFO"
+
+Write-Log "SCRIPT PARAMETERS:" "INFO"
 Write-Log "  isoPath: $isoPath" "INFO"
 Write-Log "  outputISO: $outputISO" "INFO"
+Write-Log "  removeEdge: $removeEdge" "INFO"
+Write-Log "  removeOneDrive: $removeOneDrive" "INFO"
+Write-Log "  tpmBypass: $tpmBypass" "INFO"
+Write-Log "  testMode: $testMode" "INFO"
 
 # Validate ISO file exists
 if (-not (Test-Path $isoPath)) {

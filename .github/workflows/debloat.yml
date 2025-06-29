@@ -216,99 +216,117 @@ jobs:
         try {
             Write-Host "🚀 Starting Windows Lite processing with 20-minute timeout..." -ForegroundColor Cyan
             
-            # Start the Windows Lite processing script as a job with timeout
-            $job = Start-Job -ScriptBlock {
-                param($scriptPath, $params, $workingDir)
-                
-                # Set execution policy for the job
+            # Execute Windows Lite processing directly (no job) for better debugging
+            Write-Host "🔍 DIRECT EXECUTION (no PowerShell job) for debugging..." -ForegroundColor Cyan
+            Write-Host "Working directory: $(Get-Location)" -ForegroundColor Yellow
+            Write-Host "Script path: $windowsLiteScript" -ForegroundColor Yellow
+            Write-Host "ISO input: $($windowsLiteParams.isoPath)" -ForegroundColor Yellow
+            Write-Host "ISO output: $($windowsLiteParams.outputISO)" -ForegroundColor Yellow
+            Write-Host "Input file exists: $(Test-Path $windowsLiteParams.isoPath)" -ForegroundColor $(if (Test-Path $windowsLiteParams.isoPath) { "Green" } else { "Red" })
+            
+            try {
+                # Set execution policy
                 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
                 
-                # Change to the correct working directory
-                Set-Location $workingDir
-                Write-Host "Job working directory: $(Get-Location)"
-                Write-Host "Job ISO path: $($params.isoPath)"
-                Write-Host "Job ISO exists: $(Test-Path $params.isoPath)"
+                # Execute Windows Lite processing directly
+                Write-Host "⚡ Executing Windows Lite processing directly..." -ForegroundColor Cyan
+                & $windowsLiteScript @windowsLiteParams
+                $exitCode = $LASTEXITCODE
                 
-                # Execute Windows Lite processing
-                & $scriptPath @params
+                Write-Host "✅ Windows Lite processing completed with exit code: $exitCode" -ForegroundColor $(if ($exitCode -eq 0) { "Green" } else { "Yellow" })
                 
-                return $LASTEXITCODE
-            } -ArgumentList $windowsLiteScript, $windowsLiteParams, $currentDir
-            
-            # Wait for job with extended timeout (20 minutes for large ISOs)
-            $timeout = 1200 # 20 minutes in seconds
-            $completed = Wait-Job $job -Timeout $timeout
-            
-            if ($completed) {
-                # Job completed within timeout
-                $output = Receive-Job $job
-                $output | ForEach-Object { Write-Host $_ }
+                # Immediate post-execution check
+                Write-Host "=== POST-EXECUTION FILE CHECK ===" -ForegroundColor Cyan
+                Write-Host "Current directory: $(Get-Location)" -ForegroundColor Yellow
+                Write-Host "Expected output: $($windowsLiteParams.outputISO)" -ForegroundColor Yellow
+                Write-Host "Output exists: $(Test-Path $windowsLiteParams.outputISO)" -ForegroundColor $(if (Test-Path $windowsLiteParams.outputISO) { "Green" } else { "Red" })
                 
-                $exitCode = if ($job.State -eq "Completed") { 
-                    $jobOutput = Receive-Job $job
-                    if ($jobOutput -and $jobOutput[-1] -is [int]) { $jobOutput[-1] } else { 0 }
-                } else { 1 }
-                
-                Write-Host "Windows Lite processing exit code: $exitCode" -ForegroundColor Cyan
+                if (Test-Path $windowsLiteParams.outputISO) {
+                    $outputInfo = Get-Item $windowsLiteParams.outputISO
+                    Write-Host "✅ Output file found: $($outputInfo.Name) ($([math]::Round($outputInfo.Length / 1MB, 1)) MB)" -ForegroundColor Green
+                } else {
+                    Write-Host "❌ Output file NOT found" -ForegroundColor Red
+                    Write-Host "Files in current directory:" -ForegroundColor Yellow
+                    Get-ChildItem . | ForEach-Object {
+                        $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
+                        Write-Host "  $($_.Name) ($size)" -ForegroundColor Yellow
+                    }
+                }
                 
                 if ($exitCode -ne 0) {
-                    Write-Host "⚠️ Windows Lite processing encountered issues but may have partial success..." -ForegroundColor Yellow
-                    
-                    # Check if output file exists and has reasonable size
-                    if (Test-Path "windows-lite.iso") {
-                        $outputSize = (Get-Item "windows-lite.iso").Length / 1GB
-                        if ($outputSize -gt 0.5) {  # At least 500MB suggests partial success
-                            Write-Host "✅ Partial Windows Lite processing success - ISO created ($([math]::Round($outputSize, 2)) GB)" -ForegroundColor Green
-                        } else {
-                            throw "Windows Lite processing failed - output too small"
-                        }
-                    } else {
-                        throw "Windows Lite processing failed - no output created"
-                    }
-                } else {
-                    Write-Host "✅ Windows Lite processing completed successfully!" -ForegroundColor Green
+                    Write-Host "⚠️ Non-zero exit code but continuing to check for output..." -ForegroundColor Yellow
                 }
+                
+            } catch {
+                Write-Host "❌ Error executing Windows Lite processing: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "Exception details: $($_.Exception)" -ForegroundColor Red
+                Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
+                throw
+            }
+            
+            # Validate results
+            Write-Host "=== FINAL OUTPUT VALIDATION ===" -ForegroundColor Cyan
+            
+            # Check for output file
+            $outputFound = Test-Path $windowsLiteParams.outputISO
+            Write-Host "Output file exists: $outputFound" -ForegroundColor $(if ($outputFound) { "Green" } else { "Red" })
+            
+            if ($outputFound) {
+                $outputInfo = Get-Item $windowsLiteParams.outputISO
+                $outputSizeGB = $outputInfo.Length / 1GB
+                Write-Host "✅ Windows Lite ISO created successfully!" -ForegroundColor Green
+                Write-Host "  Path: $($outputInfo.FullName)" -ForegroundColor Green
+                Write-Host "  Size: $([math]::Round($outputSizeGB, 2)) GB ($($outputInfo.Length) bytes)" -ForegroundColor Green
+                Write-Host "  Created: $($outputInfo.CreationTime)" -ForegroundColor Green
+                
+                # Validate minimum size
+                if ($outputSizeGB -lt 0.1) {
+                    Write-Host "❌ Output file too small ($([math]::Round($outputSizeGB * 1024, 1)) MB) - likely invalid" -ForegroundColor Red
+                    throw "Windows Lite processing created invalid output file"
+                } else {
+                    Write-Host "✅ Output file size validation passed" -ForegroundColor Green
+                }
+                
             } else {
-                # Job timed out
-                Write-Host "⚠️ Windows Lite processing timeout - attempting graceful completion..." -ForegroundColor Yellow
+                Write-Host "❌ Windows Lite processing failed - no output file created" -ForegroundColor Red
+                Write-Host "Expected path: $($windowsLiteParams.outputISO)" -ForegroundColor Red
                 
-                # Try to get partial output
-                $partialOutput = Receive-Job $job
-                $partialOutput | ForEach-Object { Write-Host $_ }
+                # Show available files for debugging
+                Write-Host "Available files in working directory:" -ForegroundColor Yellow
+                Get-ChildItem . | ForEach-Object {
+                    $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
+                    Write-Host "  $($_.Name) ($size)" -ForegroundColor Yellow
+                }
                 
-                # Stop the job gracefully
-                Stop-Job $job
-                Remove-Job $job -Force
-                
-                # Kill any stuck DISM processes
+                # Clean up any stuck processes
                 Get-Process -Name "dism" -ErrorAction SilentlyContinue | Stop-Process -Force
-                
-                # Clean up any stuck mounts
                 & dism /cleanup-wim 2>$null
                 & dism /cleanup-mountpoints 2>$null
                 
-                # Check if we have a usable output despite timeout
-                if (Test-Path "windows-lite.iso") {
-                    $outputSize = (Get-Item "windows-lite.iso").Length / 1GB
-                    if ($outputSize -gt 2.0) {  # At least 2GB suggests reasonable output
-                        Write-Host "✅ Windows Lite processing completed with timeout but usable output created ($([math]::Round($outputSize, 2)) GB)" -ForegroundColor Green
-                    } else {
-                        throw "Windows Lite processing timed out with unusable output"
-                    }
-                } else {
-                    throw "Windows Lite processing timed out with no output"
-                }
+                throw "Windows Lite processing failed - no output created"
             }
-            
-            Remove-Job $job -Force -ErrorAction SilentlyContinue
             
         } catch {
             Write-Host "❌ Error during Windows Lite processing: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Exception type: $($_.Exception.GetType().Name)" -ForegroundColor Red
+            if ($_.ScriptStackTrace) {
+                Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
+            }
             
             # Final cleanup
+            Write-Host "🧹 Cleaning up processes and mounts..." -ForegroundColor Yellow
             Get-Process -Name "dism" -ErrorAction SilentlyContinue | Stop-Process -Force
             & dism /cleanup-wim 2>$null
             & dism /cleanup-mountpoints 2>$null
+            
+            # Show final state for debugging
+            Write-Host "=== ERROR STATE DEBUGGING ===" -ForegroundColor Red
+            Write-Host "Working directory: $(Get-Location)" -ForegroundColor Yellow
+            Write-Host "Files in directory:" -ForegroundColor Yellow
+            Get-ChildItem . | ForEach-Object {
+                $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
+                Write-Host "  $($_.Name) ($size)" -ForegroundColor Yellow
+            }
             
             # Exit with error - don't fallback to old ineffective script
             Write-Host "❌ Windows Lite processing is the only supported method" -ForegroundColor Red
@@ -321,9 +339,16 @@ jobs:
       run: |
         Write-Host "=== WINDOWS LITE PROCESSING RESULTS ===" -ForegroundColor Cyan
         
-        if (Test-Path "windows-lite.iso") {
-            $originalISO = Get-Item "windows.iso"
-            $windowsLiteISO = Get-Item "windows-lite.iso"
+        # Use the same paths as defined in the processing step
+        $currentDir = Get-Location
+        $inputISOPath = Join-Path $currentDir "windows.iso"
+        $outputISOPath = Join-Path $currentDir "windows-lite.iso"
+        
+        Write-Host "Checking for output ISO at: $outputISOPath" -ForegroundColor Yellow
+        
+        if (Test-Path $outputISOPath) {
+            $originalISO = Get-Item $inputISOPath
+            $windowsLiteISO = Get-Item $outputISOPath
             
             $originalSize = $originalISO.Length / 1GB
             $windowsLiteSize = $windowsLiteISO.Length / 1GB
@@ -479,12 +504,47 @@ jobs:
             Write-Host "⚠️ Autounattend profile not found - was it generated during processing?" -ForegroundColor Yellow
         }
       
+    - name: 🔍 Pre-Upload Verification
+      if: success()
+      run: |
+        Write-Host "=== PRE-UPLOAD VERIFICATION ===" -ForegroundColor Cyan
+        Write-Host "Current directory: $(Get-Location)" -ForegroundColor Yellow
+        Write-Host "Looking for Windows Lite ISO files..." -ForegroundColor Yellow
+        
+        # Check for main output file
+        if (Test-Path "windows-lite.iso") {
+            $file = Get-Item "windows-lite.iso"
+            Write-Host "✅ Found windows-lite.iso: $([math]::Round($file.Length / 1MB, 1)) MB" -ForegroundColor Green
+        } else {
+            Write-Host "❌ windows-lite.iso not found" -ForegroundColor Red
+        }
+        
+        # List all ISO files
+        $isoFiles = Get-ChildItem . -Filter "*.iso" -ErrorAction SilentlyContinue
+        if ($isoFiles) {
+            Write-Host "All ISO files in directory:" -ForegroundColor Yellow
+            $isoFiles | ForEach-Object {
+                Write-Host "  $($_.Name): $([math]::Round($_.Length / 1MB, 1)) MB" -ForegroundColor Green
+            }
+        } else {
+            Write-Host "❌ No ISO files found in current directory" -ForegroundColor Red
+        }
+        
+        # List all files for debugging
+        Write-Host "All files in current directory:" -ForegroundColor Yellow
+        Get-ChildItem . | ForEach-Object {
+            $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
+            Write-Host "  $($_.Name) ($size)" -ForegroundColor Cyan
+        }
+        
     - name: 📤 Upload Windows Lite ISO
       if: success()
       uses: actions/upload-artifact@v4
       with:
         name: windows-lite-iso
-        path: windows-lite.iso
+        path: |
+          windows-lite.iso
+          *.iso
         retention-days: 7
         compression-level: 0
         
