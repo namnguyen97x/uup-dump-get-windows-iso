@@ -9,6 +9,9 @@ param(
     [switch]$testMode = $false
 )
 
+# Main script execution wrapped in try-catch for better error handling
+try {
+
 Write-Host "=== DEBUG: Script Parameters ==="
 Write-Host "isoPath: '$isoPath'"
 Write-Host "winEdition: '$winEdition'"
@@ -173,13 +176,48 @@ try {
 
 # 2. Check for install.wim or install.esd
 Write-Host "=== KIỂM TRA INSTALL.WIM/INSTALL.ESD ==="
+Write-Host "Destination directory: $dest"
+Write-Host "Destination exists: $(Test-Path $dest)"
+
+# List all files in destination first
+if (Test-Path $dest) {
+    Write-Host "Files in destination root:"
+    Get-ChildItem $dest | ForEach-Object { 
+        Write-Host "  $($_.Name) ($($_.PSIsContainer ? 'DIR' : [math]::Round($_.Length / 1MB, 2).ToString() + ' MB'))"
+    }
+} else {
+    Write-Host "ERROR: Destination directory does not exist!" -ForegroundColor Red
+    exit 1
+}
+
+$sourcesDir = Join-Path $dest "sources"
+Write-Host "Sources directory: $sourcesDir"
+Write-Host "Sources directory exists: $(Test-Path $sourcesDir)"
+
+if (Test-Path $sourcesDir) {
+    Write-Host "Files in sources directory:"
+    Get-ChildItem $sourcesDir | ForEach-Object { 
+        Write-Host "  $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+    }
+} else {
+    Write-Host "ERROR: Sources directory does not exist!" -ForegroundColor Red
+    exit 1
+}
+
 $wim = Join-Path $dest "sources\install.wim"
 $esd = Join-Path $dest "sources\install.esd"
 
 Write-Host "Checking for install.wim: $wim"
 Write-Host "install.wim exists: $(Test-Path $wim)"
+if (Test-Path $wim) {
+    Write-Host "install.wim size: $([math]::Round((Get-Item $wim).Length / 1GB, 2)) GB"
+}
+
 Write-Host "Checking for install.esd: $esd"
 Write-Host "install.esd exists: $(Test-Path $esd)"
+if (Test-Path $esd) {
+    Write-Host "install.esd size: $([math]::Round((Get-Item $esd).Length / 1GB, 2)) GB"
+}
 
 if (-not (Test-Path $wim)) {
     if (Test-Path $esd) {
@@ -248,19 +286,39 @@ Write-Host "install.wim file size: $((Get-Item $wim).Length / 1GB) GB"
 # 3. Get WIM information and count images
 Write-Host "=== LẤY THÔNG TIN WIM ==="
 try {
-    Write-Host "Running DISM get-wiminfo..."
+    Write-Host "Running DISM get-wiminfo on: $wim"
+    Write-Host "WIM file size: $([math]::Round((Get-Item $wim).Length / 1GB, 2)) GB"
+    
+    # Test if DISM is available first
+    $dismTest = & dism /? 2>&1
+    $dismExitCode = $LASTEXITCODE
+    Write-Host "DISM availability test exit code: $dismExitCode"
+    
+    if ($dismExitCode -ne 0) {
+        Write-Host "ERROR: DISM is not available or not working properly" -ForegroundColor Red
+        Write-Host "DISM test output: $($dismTest -join ' ')" -ForegroundColor Yellow
+        exit 1
+    }
+    
+    Write-Host "DISM is available, running get-wiminfo..."
     $wimInfo = & dism /get-wiminfo /wimfile:$wim 2>&1
     $exitCode = $LASTEXITCODE
     
-    Write-Host "DISM get-wiminfo result:"
-    $wimInfo | ForEach-Object { Write-Host "  $_" }
-    Write-Host "Exit code: $exitCode"
+    Write-Host "DISM get-wiminfo exit code: $exitCode"
     
     if ($exitCode -ne 0) {
         Write-Host "LỖI: Không thể lấy thông tin WIM!" -ForegroundColor Red
-        Write-Host "This might be due to corrupted WIM file or insufficient permissions" -ForegroundColor Red
+        Write-Host "DISM get-wiminfo output:" -ForegroundColor Yellow
+        $wimInfo | ForEach-Object { Write-Host "  $_" }
+        Write-Host "This might be due to:" -ForegroundColor Red
+        Write-Host "  - Corrupted WIM file" -ForegroundColor Red
+        Write-Host "  - Insufficient permissions" -ForegroundColor Red
+        Write-Host "  - WIM file is locked by another process" -ForegroundColor Red
         exit 1
     }
+    
+    Write-Host "DISM get-wiminfo successful, output:"
+    $wimInfo | ForEach-Object { Write-Host "  $_" }
     
     # Count images using correct pattern
     $imageLines = $wimInfo | Select-String "Index:"
@@ -666,7 +724,7 @@ if ($isoSuccess) {
     }
     
     Write-Host "=== DEBLOAT HOÀN TẤT ==="
-    Write-Host "File ISO đã được debloat: $outputISO"
+Write-Host "File ISO đã được debloat: $outputISO" 
 } else {
     Write-Host "Giữ lại thư mục debloated để sử dụng: $dest" -ForegroundColor Green
     Write-Host "Dọn dẹp mount directory..."
@@ -676,4 +734,27 @@ if ($isoSuccess) {
     } catch {
         Write-Host "Cảnh báo: Không thể dọn dẹp mount directory: $_" -ForegroundColor Yellow
     }
-} 
+}
+
+# End of main try block
+} catch {
+    Write-Host "=== CRITICAL ERROR ===" -ForegroundColor Red
+    Write-Host "Script failed with unexpected error: $_" -ForegroundColor Red
+    Write-Host "Error type: $($_.Exception.GetType().Name)" -ForegroundColor Red
+    Write-Host "Error message: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Stack trace:" -ForegroundColor Red
+    Write-Host "$($_.ScriptStackTrace)" -ForegroundColor Red
+    Write-Host "Line: $($_.InvocationInfo.ScriptLineNumber)" -ForegroundColor Red
+    Write-Host "Position: $($_.InvocationInfo.PositionMessage)" -ForegroundColor Red
+    
+    # Flush output and wait a moment before exiting
+    [System.Console]::Out.Flush()
+    [System.Console]::Error.Flush()
+    Start-Sleep -Seconds 1
+    
+    exit 1
+}
+
+# Final output flush
+[System.Console]::Out.Flush()
+Write-Host "Script completed successfully" 
