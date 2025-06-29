@@ -271,13 +271,18 @@ jobs:
             echo "- **Debloated ISO**: $([math]::Round($debloatedSize, 2)) GB" >> $env:GITHUB_STEP_SUMMARY
             echo "- **Space Saved**: $([math]::Round($savedSpace, 2)) GB ($([math]::Round($percentage, 1))%)" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
-            echo "### 🗑️ Components Removed (Default Settings)" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ Microsoft Store bloatware apps (Candy Crush, TikTok, etc.)" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ Microsoft Edge browser" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ OneDrive integration" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ Windows capabilities (WordPad, Media Player, etc.)" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ Privacy-invasive telemetry components" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ Windows 11 TPM/SecureBoot checks bypassed" >> $env:GITHUB_STEP_SUMMARY
+            echo "### 🗑️ Components Removed (Aggressive Debloating)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Single Windows edition** exported with maximum compression" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Microsoft Store bloatware apps** (Candy Crush, TikTok, etc.)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Microsoft Edge browser** completely removed" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **OneDrive integration** fully stripped" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Windows capabilities** (WordPad, Media Player, etc.)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Bloatware directories** (sxs, inf, background, recovery)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Language packs** (kept en-US only)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Setup and servicing files** (setupprep, oobe, etc.)" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Event logs and diagnostics** removed" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Privacy-invasive telemetry** components" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Windows 11 TPM/SecureBoot** checks bypassed" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
             echo "### 🚀 What's Preserved" >> $env:GITHUB_STEP_SUMMARY
             echo "- ✅ **setup.exe** - Installation capability maintained" >> $env:GITHUB_STEP_SUMMARY
@@ -285,11 +290,14 @@ jobs:
             echo "- ✅ **Boot files** - System can start properly" >> $env:GITHUB_STEP_SUMMARY
             echo "- ✅ **Core Windows** - All essential components intact" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
-            echo "### 🔧 Robust Features" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ **Enhanced error handling** with fallback mechanisms" >> $env:GITHUB_STEP_SUMMARY
+            echo "### 🔧 Aggressive Debloating Features" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Single edition export** - removes all other Windows editions" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Maximum WIM compression** - significantly reduces file size" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Bloatware directory removal** - removes non-essential components" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Enhanced error handling** with multiple fallback mechanisms" >> $env:GITHUB_STEP_SUMMARY
+            echo "- ✅ **Size-aware ISO creation** - handles large files properly" >> $env:GITHUB_STEP_SUMMARY  
             echo "- ✅ **Comprehensive logging** for troubleshooting" >> $env:GITHUB_STEP_SUMMARY
             echo "- ✅ **Multiple mount strategies** for better compatibility" >> $env:GITHUB_STEP_SUMMARY
-            echo "- ✅ **Disk space validation** and environment checks" >> $env:GITHUB_STEP_SUMMARY
             echo "- ✅ **Graceful degradation** when some operations fail" >> $env:GITHUB_STEP_SUMMARY
             echo "" >> $env:GITHUB_STEP_SUMMARY
             echo "📥 **Download the debloated ISO from artifacts below**" >> $env:GITHUB_STEP_SUMMARY

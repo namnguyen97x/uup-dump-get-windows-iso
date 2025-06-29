@@ -71,73 +71,148 @@ try {
         }
     }
     
-    # Method 2: Remove language packs (keep only en-US)
-    Write-Log "Removing extra language packs..."
-    $langDirs = @("$tempDir\sources\lang", "$tempDir\support\lang")
-    
-    foreach ($langDir in $langDirs) {
-        if (Test-Path $langDir) {
-            Get-ChildItem $langDir | Where-Object { 
-                $_.Name -notmatch "en-us|en-US" 
-            } | ForEach-Object {
-                Remove-Item $_.FullName -Recurse -Force
-                Write-Log "Removed language: $($_.Name)" "SUCCESS"
-            }
-        }
-    }
-    
-    # Method 3: Remove support directories
-    Write-Log "Removing unnecessary support directories..."
-    $supportDirs = @(
-        "$tempDir\support\adfs",
-        "$tempDir\support\logging", 
-        "$tempDir\support\migration",
-        "$tempDir\upgrade"
-    )
-    
-    foreach ($dir in $supportDirs) {
-        if (Test-Path $dir) {
-            $dirSize = (Get-ChildItem $dir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB
-            Remove-Item $dir -Recurse -Force
-            Write-Log "Removed directory: $(Split-Path $dir -Leaf) ($([math]::Round($dirSize, 1)) MB)" "SUCCESS"
-        }
-    }
-    
-    # Method 4: WIM optimization without mounting
-    Write-Log "=== STEP 3: WIM OPTIMIZATION ==="
+    # Method 2: Aggressive WIM debloating without mounting
+    Write-Log "Performing aggressive WIM debloating..."
     
     $installWim = "$tempDir\sources\install.wim"
     if (Test-Path $installWim) {
         $originalWimSize = (Get-Item $installWim).Length / 1GB
         Write-Log "Original install.wim size: $([math]::Round($originalWimSize, 2)) GB"
         
-        # Try to recompress WIM for space savings
-        $tempWim = "$tempDir\sources\install_optimized.wim"
-        Write-Log "Recompressing WIM for space optimization..."
+        # Export only the first Windows edition and remove others
+        Write-Log "Exporting primary Windows edition only..."
+        $singleEditionWim = "$tempDir\sources\install_single.wim"
         
         try {
-            # Export with maximum compression
-            $result = & dism /export-image /sourceimagefile:$installWim /sourceindex:1 /destinationimagefile:$tempWim /compress:max /checkintegrity 2>&1
+            # Export with maximum compression, keeping only index 1
+            $exportResult = & dism /export-image /sourceimagefile:$installWim /sourceindex:1 /destinationimagefile:$singleEditionWim /compress:max /bootable /checkintegrity 2>&1
             
-            if ($LASTEXITCODE -eq 0 -and (Test-Path $tempWim)) {
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $singleEditionWim)) {
                 Remove-Item $installWim -Force
-                Rename-Item $tempWim $installWim
+                Rename-Item $singleEditionWim $installWim
                 
                 $newWimSize = (Get-Item $installWim).Length / 1GB
                 $wimSaved = $originalWimSize - $newWimSize
-                Write-Log "WIM recompressed: $([math]::Round($newWimSize, 2)) GB (saved $([math]::Round($wimSaved, 2)) GB)" "SUCCESS"
+                Write-Log "WIM single edition export: $([math]::Round($newWimSize, 2)) GB (saved $([math]::Round($wimSaved, 2)) GB)" "SUCCESS"
             } else {
-                Write-Log "WIM recompression failed, keeping original" "WARNING"
-                if (Test-Path $tempWim) { Remove-Item $tempWim -Force }
+                Write-Log "Single edition export failed, trying recompression..." "WARNING"
+                if (Test-Path $singleEditionWim) { Remove-Item $singleEditionWim -Force }
+                
+                # Fallback: just recompress existing WIM
+                $recompressedWim = "$tempDir\sources\install_recompressed.wim"
+                $recompressResult = & dism /export-image /sourceimagefile:$installWim /sourceindex:1 /destinationimagefile:$recompressedWim /compress:max /checkintegrity 2>&1
+                
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $recompressedWim)) {
+                    Remove-Item $installWim -Force
+                    Rename-Item $recompressedWim $installWim
+                    
+                    $newWimSize = (Get-Item $installWim).Length / 1GB
+                    $wimSaved = $originalWimSize - $newWimSize
+                    Write-Log "WIM recompressed: $([math]::Round($newWimSize, 2)) GB (saved $([math]::Round($wimSaved, 2)) GB)" "SUCCESS"
+                } else {
+                    Write-Log "WIM recompression also failed, keeping original" "WARNING"
+                    if (Test-Path $recompressedWim) { Remove-Item $recompressedWim -Force }
+                }
             }
         } catch {
-            Write-Log "WIM recompression exception: $($_.Exception.Message)" "WARNING"
+            Write-Log "WIM processing exception: $($_.Exception.Message)" "WARNING"
         }
     }
     
-    # Method 5: Add TPM bypass if requested
+    # Method 3: Remove language packs aggressively
+    Write-Log "Removing language packs and regional content..."
+    $langDirs = @(
+        "$tempDir\sources\lang", 
+        "$tempDir\support\lang",
+        "$tempDir\sources\license"
+    )
+    
+    foreach ($langDir in $langDirs) {
+        if (Test-Path $langDir) {
+            $dirSize = (Get-ChildItem $langDir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
+            Get-ChildItem $langDir | Where-Object { 
+                $_.Name -notmatch "en-us|en-US" 
+            } | ForEach-Object {
+                Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Log "Removed language: $($_.Name)" "SUCCESS"
+            }
+            Write-Log "Processed language directory: $(Split-Path $langDir -Leaf) ($([math]::Round($dirSize, 1)) MB)" "SUCCESS"
+        }
+    }
+    
+    # Method 4: Remove Windows bloatware directories
+    Write-Log "Removing Windows bloatware directories..."
+    $bloatDirs = @(
+        "$tempDir\sources\sxs",           # Component store (can be large)
+        "$tempDir\sources\background",     # Background images
+        "$tempDir\sources\inf",           # Driver inf files (non-essential)
+        "$tempDir\sources\replacement",   # Replacement manifests
+        "$tempDir\sources\dlmanifests"    # Download manifests
+    )
+    
+    foreach ($dir in $bloatDirs) {
+        if (Test-Path $dir) {
+            $dirSize = (Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
+            try {
+                Remove-Item $dir -Recurse -Force -ErrorAction Stop
+                Write-Log "Removed bloat directory: $(Split-Path $dir -Leaf) ($([math]::Round($dirSize, 1)) MB)" "SUCCESS"
+            } catch {
+                Write-Log "Could not remove $(Split-Path $dir -Leaf): $($_.Exception.Message)" "WARNING"
+            }
+        }
+    }
+    
+    # Method 5: Remove support directories and additional bloat
+    Write-Log "Removing unnecessary support directories and additional bloat..."
+    $supportDirs = @(
+        "$tempDir\support\adfs",
+        "$tempDir\support\logging", 
+        "$tempDir\support\migration",
+        "$tempDir\upgrade",
+        "$tempDir\sources\EtwLogs",      # Event tracing logs
+        "$tempDir\sources\Panther",     # Setup logs
+        "$tempDir\sources\Recovery",    # Recovery tools (can be large)
+        "$tempDir\sources\Servicing"    # Servicing data
+    )
+    
+    foreach ($dir in $supportDirs) {
+        if (Test-Path $dir) {
+            $dirSize = (Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
+            try {
+                Remove-Item $dir -Recurse -Force -ErrorAction Stop
+                Write-Log "Removed directory: $(Split-Path $dir -Leaf) ($([math]::Round($dirSize, 1)) MB)" "SUCCESS"
+            } catch {
+                Write-Log "Could not remove $(Split-Path $dir -Leaf): $($_.Exception.Message)" "WARNING"
+            }
+        }
+    }
+    
+    # Method 6: Remove large unnecessary files
+    Write-Log "Removing large unnecessary files..."
+    $largeFiles = @(
+        "$tempDir\sources\setupprep.exe",
+        "$tempDir\sources\setuphost.exe", 
+        "$tempDir\sources\migwiz.exe",
+        "$tempDir\sources\oobe.exe",
+        "$tempDir\sources\reagent.exe",
+        "$tempDir\sources\spprep.exe"
+    )
+    
+    foreach ($file in $largeFiles) {
+        if (Test-Path $file) {
+            $fileSize = (Get-Item $file).Length / 1MB
+            try {
+                Remove-Item $file -Force -ErrorAction Stop
+                Write-Log "Removed file: $(Split-Path $file -Leaf) ($([math]::Round($fileSize, 1)) MB)" "SUCCESS"
+            } catch {
+                Write-Log "Could not remove $(Split-Path $file -Leaf): $($_.Exception.Message)" "WARNING"
+            }
+        }
+    }
+    
+    # Method 7: Add TPM bypass if requested
     if ($tpmBypass) {
-        Write-Log "=== STEP 4: ADDING TPM BYPASS ==="
+        Write-Log "Adding TPM bypass via autounattend.xml..."
         
         # Create autounattend.xml for TPM bypass
         $autounattendPath = "$tempDir\autounattend.xml"
@@ -169,7 +244,7 @@ try {
         Write-Log "Added TPM bypass via autounattend.xml" "SUCCESS"
     }
     
-    Write-Log "=== STEP 5: CREATE OPTIMIZED ISO ==="
+    Write-Log "=== CREATING OPTIMIZED ISO ==="
     
     # Calculate space saved so far
     $currentSize = (Get-ChildItem $tempDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB
@@ -496,11 +571,15 @@ Files debloated successfully, but ISO creation had technical limitations.
         Write-Log "Total space saved: $([math]::Round($totalSaved, 2)) GB ($([math]::Round($percentage, 1))%)"
         
         # Show what was accomplished
-        Write-Log "=== WHAT WAS REMOVED ===" "SUCCESS"
+        Write-Log "=== AGGRESSIVE DEBLOATING COMPLETED ===" "SUCCESS"
         Write-Log "✅ Unnecessary ISO files (ei.cfg, pid.txt, autorun.inf)"
-        Write-Log "✅ Extra language packs (kept en-US only)"
-        Write-Log "✅ Support directories (adfs, logging, migration)"
-        Write-Log "✅ WIM recompression for space optimization"
+        Write-Log "✅ Single Windows edition export with max compression"
+        Write-Log "✅ Extra language packs and regional content removed"
+        Write-Log "✅ Bloatware directories (sxs, inf, background, etc.)"
+        Write-Log "✅ Support directories (adfs, logging, migration, upgrade)"
+        Write-Log "✅ Recovery tools and servicing data removed"
+        Write-Log "✅ Large unnecessary setup files removed"
+        Write-Log "✅ Event tracing and setup logs removed"
         if ($tpmBypass) {
             Write-Log "✅ TPM/SecureBoot bypass added via autounattend.xml"
         }

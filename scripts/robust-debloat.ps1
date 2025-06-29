@@ -734,30 +734,100 @@ try {
             }
         }
         
-        # Method 4: WIM recompression (this usually works even when mounting fails)
-        Write-StatusLog "Attempting WIM recompression..."
+        # Method 4: Aggressive WIM processing (export single edition with max compression)
+        Write-StatusLog "Performing aggressive WIM debloating..."
         $originalWimSize = (Get-Item $installWim).Length / 1GB
-        $tempWim = "$tempDir\sources\install_optimized.wim"
+        Write-StatusLog "Original install.wim size: $([math]::Round($originalWimSize, 2)) GB"
+        
+        # Try to export only the selected edition with maximum compression
+        $singleEditionWim = "$tempDir\sources\install_single.wim"
         
         try {
-            $result = & dism /export-image /sourceimagefile:$installWim /sourceindex:1 /destinationimagefile:$tempWim /compress:max /checkintegrity 2>&1
+            Write-StatusLog "Exporting single Windows edition with max compression..."
+            $exportResult = & dism /export-image /sourceimagefile:$installWim /sourceindex:$imageIndex /destinationimagefile:$singleEditionWim /compress:max /bootable /checkintegrity 2>&1
             
-            if ($LASTEXITCODE -eq 0 -and (Test-Path $tempWim)) {
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $singleEditionWim)) {
                 Remove-Item $installWim -Force
-                Rename-Item $tempWim $installWim
+                Rename-Item $singleEditionWim $installWim
                 
                 $newWimSize = (Get-Item $installWim).Length / 1GB
                 $wimSaved = $originalWimSize - $newWimSize
-                Write-StatusLog "WIM recompressed: $([math]::Round($newWimSize, 2)) GB (saved $([math]::Round($wimSaved, 2)) GB)" "SUCCESS"
+                Write-StatusLog "WIM single edition export: $([math]::Round($newWimSize, 2)) GB (saved $([math]::Round($wimSaved, 2)) GB)" "SUCCESS"
             } else {
-                Write-StatusLog "WIM recompression failed, keeping original" "WARNING"
-                if (Test-Path $tempWim) { Remove-Item $tempWim -Force }
+                Write-StatusLog "Single edition export failed, trying recompression..." "WARNING"
+                if (Test-Path $singleEditionWim) { Remove-Item $singleEditionWim -Force }
+                
+                # Fallback: recompress existing WIM
+                $recompressedWim = "$tempDir\sources\install_recompressed.wim"
+                $recompressResult = & dism /export-image /sourceimagefile:$installWim /sourceindex:$imageIndex /destinationimagefile:$recompressedWim /compress:max /checkintegrity 2>&1
+                
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $recompressedWim)) {
+                    Remove-Item $installWim -Force
+                    Rename-Item $recompressedWim $installWim
+                    
+                    $newWimSize = (Get-Item $installWim).Length / 1GB
+                    $wimSaved = $originalWimSize - $newWimSize
+                    Write-StatusLog "WIM recompressed: $([math]::Round($newWimSize, 2)) GB (saved $([math]::Round($wimSaved, 2)) GB)" "SUCCESS"
+                } else {
+                    Write-StatusLog "WIM recompression also failed, keeping original" "WARNING"
+                    if (Test-Path $recompressedWim) { Remove-Item $recompressedWim -Force }
+                }
             }
         } catch {
-            Write-StatusLog "WIM recompression exception: $($_.Exception.Message)" "WARNING"
+            Write-StatusLog "WIM processing exception: $($_.Exception.Message)" "WARNING"
         }
         
-        # Method 5: Add TPM bypass via autounattend.xml
+        # Method 5: Remove bloatware directories from ISO structure
+        Write-StatusLog "Removing bloatware directories from ISO structure..."
+        $bloatDirs = @(
+            "$tempDir\sources\sxs",           # Component store (can be large)
+            "$tempDir\sources\background",     # Background images
+            "$tempDir\sources\inf",           # Driver inf files (non-essential)
+            "$tempDir\sources\replacement",   # Replacement manifests
+            "$tempDir\sources\dlmanifests",   # Download manifests
+            "$tempDir\sources\EtwLogs",       # Event tracing logs
+            "$tempDir\sources\Panther",       # Setup logs
+            "$tempDir\sources\Recovery",      # Recovery tools (can be large)
+            "$tempDir\sources\Servicing",     # Servicing data
+            "$tempDir\sources\license"        # License files (keep only en-US)
+        )
+        
+        foreach ($dir in $bloatDirs) {
+            if (Test-Path $dir) {
+                $dirSize = (Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
+                try {
+                    Remove-Item $dir -Recurse -Force -ErrorAction Stop
+                    Write-StatusLog "Removed bloat directory: $(Split-Path $dir -Leaf) ($([math]::Round($dirSize, 1)) MB)" "SUCCESS"
+                } catch {
+                    Write-StatusLog "Could not remove $(Split-Path $dir -Leaf): $($_.Exception.Message)" "WARNING"
+                }
+            }
+        }
+        
+        # Method 6: Remove large unnecessary files
+        Write-StatusLog "Removing large unnecessary files..."
+        $largeFiles = @(
+            "$tempDir\sources\setupprep.exe",
+            "$tempDir\sources\setuphost.exe", 
+            "$tempDir\sources\migwiz.exe",
+            "$tempDir\sources\oobe.exe",
+            "$tempDir\sources\reagent.exe",
+            "$tempDir\sources\spprep.exe"
+        )
+        
+        foreach ($file in $largeFiles) {
+            if (Test-Path $file) {
+                $fileSize = (Get-Item $file).Length / 1MB
+                try {
+                    Remove-Item $file -Force -ErrorAction Stop
+                    Write-StatusLog "Removed file: $(Split-Path $file -Leaf) ($([math]::Round($fileSize, 1)) MB)" "SUCCESS"
+                } catch {
+                    Write-StatusLog "Could not remove $(Split-Path $file -Leaf): $($_.Exception.Message)" "WARNING"
+                }
+            }
+        }
+        
+        # Method 7: Add TPM bypass via autounattend.xml
         if ($tpmBypass) {
             Write-StatusLog "Adding TPM bypass via autounattend.xml..."
             
