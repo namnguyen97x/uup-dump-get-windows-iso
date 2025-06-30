@@ -1,0 +1,266 @@
+name: 1. Extract WIM from ISO
+
+# This workflow downloads ISO artifacts from previous workflow runs
+# and extracts WIM files for Enterprise G processing
+# 
+# Usage examples:
+# - "latest": Uses the latest successful build workflow artifact
+# - "15851372572:windows-11-23h2": Uses specific run ID and artifact name
+# - Auto-detects Windows version from artifact name (23h2, 24h2, etc.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_source:
+        description: 'Artifact Source (run_id:artifact_name or latest)'
+        required: true
+        default: 'latest'
+        type: string
+      target_build:
+        description: 'Target Windows Build (auto-detect if not specified)'
+        required: false
+        default: ''
+        type: choice
+        options:
+        - ''
+        - '22631'
+        - '26100' 
+        - '22621'
+        - '22000'
+  
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly Sunday 2AM UTC
+
+env:
+  ARTIFACT_SOURCE: ${{ github.event.inputs.artifact_source || 'latest' }}
+  TARGET_BUILD: ${{ github.event.inputs.target_build || '' }}
+
+jobs:
+  extract-wim:
+    name: Download ISO and Extract WIM
+    runs-on: windows-latest
+    timeout-minutes: 180
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Environment
+      shell: powershell
+      run: |
+        Write-Host "Setting up environment..." -ForegroundColor Green
+        
+        # Create directories
+        New-Item -ItemType Directory -Path "output" -Force | Out-Null
+        New-Item -ItemType Directory -Path "temp" -Force | Out-Null
+        New-Item -ItemType Directory -Path "artifacts" -Force | Out-Null
+        
+        # Set execution policy
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        
+        # Display system info
+        $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+        $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+        Write-Host "Available disk space: $freeGB GB" -ForegroundColor Cyan
+    
+    - name: Parse Artifact Source
+      id: parse-source
+      shell: powershell
+      run: |
+        $artifactSource = "$env:ARTIFACT_SOURCE"
+        Write-Host "Parsing artifact source: $artifactSource" -ForegroundColor Green
+        
+        if ($artifactSource -eq "latest") {
+          # Find latest successful build workflow
+          Write-Host "Finding latest build workflow..." -ForegroundColor Cyan
+          $workflows = gh run list --workflow="build.yml" --status="success" --limit=10 --json=id,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
+          
+          if ($workflows.Count -eq 0) {
+            throw "No successful build workflows found"
+          }
+          
+          $latestRun = $workflows[0]
+          Write-Host "Found latest run: $($latestRun.id)" -ForegroundColor Green
+          
+          # Get artifacts from latest run
+          $artifacts = gh run view $latestRun.id --json=artifacts | ConvertFrom-Json
+          $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows-\d+" } | Select-Object -First 1
+          
+          if (-not $isoArtifact) {
+            throw "No Windows ISO artifact found in latest run"
+          }
+          
+          echo "RUN_ID=$($latestRun.id)" >> $env:GITHUB_OUTPUT
+          echo "ARTIFACT_NAME=$($isoArtifact.name)" >> $env:GITHUB_OUTPUT
+          
+        } elseif ($artifactSource -match "^(\d+):(.+)$") {
+          # Format: run_id:artifact_name
+          $runId = $matches[1]
+          $artifactName = $matches[2]
+          
+          Write-Host "Using specified run ID: $runId, artifact: $artifactName" -ForegroundColor Green
+          echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
+          echo "ARTIFACT_NAME=$artifactName" >> $env:GITHUB_OUTPUT
+          
+        } else {
+          throw "Invalid artifact source format. Use 'latest' or 'run_id:artifact_name'"
+        }
+        
+        # Auto-detect Windows version from artifact name
+        $currentArtifactName = if ($artifactSource -eq "latest") { 
+          $isoArtifact.name 
+        } else { 
+          $artifactName 
+        }
+        
+        Write-Host "Detecting Windows version from artifact: $currentArtifactName" -ForegroundColor Cyan
+        
+        $detectedBuild = ""
+        if ($currentArtifactName -match "23h2|22631") { $detectedBuild = "22631" }
+        elseif ($currentArtifactName -match "24h2|26100") { $detectedBuild = "26100" }
+        elseif ($currentArtifactName -match "22h2|22621") { $detectedBuild = "22621" }
+        elseif ($currentArtifactName -match "21h2|22000") { $detectedBuild = "22000" }
+        
+        if ($detectedBuild) {
+          Write-Host "Auto-detected Windows build: $detectedBuild" -ForegroundColor Green
+          echo "DETECTED_BUILD=$detectedBuild" >> $env:GITHUB_OUTPUT
+        } else {
+          Write-Host "Could not auto-detect Windows build from artifact name" -ForegroundColor Yellow
+        }
+      env:
+        GH_TOKEN: ${{ github.token }}
+    
+    - name: Download ISO Artifact
+      shell: powershell
+      run: |
+        $runId = "${{ steps.parse-source.outputs.RUN_ID }}"
+        $artifactName = "${{ steps.parse-source.outputs.ARTIFACT_NAME }}"
+        
+        Write-Host "Downloading artifact '$artifactName' from run $runId..." -ForegroundColor Green
+        
+        try {
+          # Download artifact
+          gh run download $runId --name "$artifactName" --dir "artifacts"
+          
+          # Find ISO file in downloaded artifact
+          $isoFile = Get-ChildItem -Path "artifacts" -Filter "*.iso" -Recurse | Select-Object -First 1
+          
+          if ($isoFile) {
+            # Move ISO to output directory
+            $outputIso = Join-Path "output" $isoFile.Name
+            Move-Item -Path $isoFile.FullName -Destination $outputIso -Force
+            
+            Write-Host "Downloaded ISO: $($isoFile.Name)" -ForegroundColor Green
+            Write-Host "ISO Size: $([math]::Round((Get-Item $outputIso).Length / 1GB, 2)) GB" -ForegroundColor Cyan
+          } else {
+            throw "No ISO file found in artifact"
+          }
+        } catch {
+          Write-Host "Download failed: $_" -ForegroundColor Red
+          exit 1
+        }
+      env:
+        GH_TOKEN: ${{ github.token }}
+    
+    - name: Extract WIM from ISO
+      shell: powershell
+      run: |
+        Write-Host "Extracting WIM file from ISO..." -ForegroundColor Green
+        
+        $isoFile = Get-ChildItem -Path "output" -Filter "*.iso" | Select-Object -First 1
+        if (-not $isoFile) {
+          throw "No ISO file found"
+        }
+        
+        # Mount ISO
+        Write-Host "Mounting ISO: $($isoFile.Name)" -ForegroundColor Cyan
+        $mountResult = Mount-DiskImage -ImagePath $isoFile.FullName -PassThru
+        
+        try {
+          $volume = $mountResult | Get-Volume
+          $installWim = Join-Path $volume.DriveLetter ":\sources\install.wim"
+          
+          if (-not (Test-Path $installWim)) {
+            throw "install.wim not found in ISO"
+          }
+          
+          # Copy WIM file
+          $wimDestination = Join-Path "output" "install.wim"
+          Write-Host "Copying install.wim..." -ForegroundColor Cyan
+          Copy-Item -Path $installWim -Destination $wimDestination -Force
+          
+          # Get WIM info
+          $wimInfo = Get-WindowsImage -ImagePath $wimDestination -Index 1
+          Write-Host "WIM Version: $($wimInfo.Version)" -ForegroundColor Green
+          Write-Host "WIM Size: $([math]::Round((Get-Item $wimDestination).Length / 1GB, 2)) GB" -ForegroundColor Cyan
+          
+          # Find Pro edition index
+          $allImages = Get-WindowsImage -ImagePath $wimDestination
+          $proIndex = $allImages | Where-Object { $_.ImageName -match "Pro(fessional)?" } | Select-Object -ExpandProperty ImageIndex -First 1
+          
+          if ($proIndex) {
+            Write-Host "Found Pro edition at index: $proIndex" -ForegroundColor Green
+            echo "PRO_INDEX=$proIndex" >> $env:GITHUB_OUTPUT
+            # Also set as environment variable for build info step
+            echo "PRO_INDEX=$proIndex" >> $env:GITHUB_ENV
+          } else {
+            throw "Pro edition not found in WIM"
+          }
+          
+        } finally {
+          # Unmount ISO
+          Write-Host "Dismounting ISO..." -ForegroundColor Cyan
+          Dismount-DiskImage -ImagePath $isoFile.FullName | Out-Null
+        }
+        
+        # Remove ISO to save space
+        Remove-Item -Path $isoFile.FullName -Force
+        Write-Host "Removed ISO file to save space" -ForegroundColor Yellow
+    
+    - name: Create Build Info
+      shell: powershell
+      run: |
+        $detectedBuild = "${{ steps.parse-source.outputs.DETECTED_BUILD }}"
+        $targetBuild = "$env:TARGET_BUILD"
+        $finalBuild = if ($targetBuild) { $targetBuild } else { $detectedBuild }
+        
+        $buildInfo = @{
+          BuildDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+          TargetBuild = $finalBuild
+          DetectedBuild = $detectedBuild
+          ProIndex = "$env:PRO_INDEX"
+          SourceRunId = "${{ steps.parse-source.outputs.RUN_ID }}"
+          SourceArtifact = "${{ steps.parse-source.outputs.ARTIFACT_NAME }}"
+          WorkflowRun = "${{ github.run_number }}"
+          CommitSha = "${{ github.sha }}"
+        }
+        
+        $buildInfo | ConvertTo-Json | Set-Content "output/build-info.json" -Encoding UTF8
+        Write-Host "Build info created for build: $finalBuild" -ForegroundColor Green
+        
+        # Set for next steps
+        echo "FINAL_BUILD=$finalBuild" >> $env:GITHUB_OUTPUT
+      id: build-info
+    
+    - name: Upload WIM Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wim-build-${{ steps.build-info.outputs.FINAL_BUILD }}-${{ github.run_number }}
+        path: |
+          output/install.wim
+          output/build-info.json
+        retention-days: 7
+        compression-level: 6
+    
+    - name: Cleanup
+      if: always()
+      shell: powershell
+      run: |
+        Write-Host "Cleaning up..." -ForegroundColor Green
+        
+        # Remove large files and temp directories
+        Get-ChildItem -Path "output" -Filter "*.iso" | Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path "temp" -Recurse | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path "artifacts" -Recurse | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        
+        Write-Host "Cleanup completed" -ForegroundColor Green 

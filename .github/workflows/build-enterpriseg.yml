@@ -1,0 +1,63 @@
+name: Start Enterprise G Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_build:
+        description: 'Target Windows Build'
+        required: true
+        default: '22631'
+        type: choice
+        options:
+        - '22631'
+        - '26100'
+        - '22621'
+        - '22000'
+      enable_activation:
+        description: 'Enable Activation'
+        required: false
+        default: true
+        type: boolean
+      remove_edge:
+        description: 'Remove Edge'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  trigger-build:
+    name: Trigger Build Process
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Trigger WIM Extraction
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const response = await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: '1-extract-wim.yml',
+            ref: 'main',
+            inputs: {
+              target_build: '${{ github.event.inputs.target_build }}'
+            }
+          });
+          
+          console.log('Started WIM extraction workflow');
+          
+          // Store inputs for the second workflow
+          core.exportVariable('ENABLE_ACTIVATION', '${{ github.event.inputs.enable_activation }}');
+          core.exportVariable('REMOVE_EDGE', '${{ github.event.inputs.remove_edge }}');
+          core.exportVariable('TARGET_BUILD', '${{ github.event.inputs.target_build }}');
+    
+    - name: Wait and Trigger Enterprise G Build
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Wait a bit for the first workflow to start
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          
+          console.log('Build process initiated successfully');
+          console.log('Monitor the "1. Extract WIM from ISO" workflow for progress');
+          console.log('The "2. Build Enterprise G ISO" workflow will start automatically after WIM extraction completes'); 
