@@ -77,7 +77,10 @@ jobs:
               
               foreach ($workflow in $allWorkflows) {
                 $artifacts = gh run view $workflow.id --json=artifacts | ConvertFrom-Json
-                $hasIsoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" }
+                $hasIsoArtifact = $artifacts.artifacts | Where-Object { 
+                  $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" -or
+                  $_.sizeInBytes -gt 1GB
+                }
                 if ($hasIsoArtifact) {
                   $workflowsWithArtifacts += $workflow
                 }
@@ -96,11 +99,40 @@ jobs:
             
             # Get artifacts from latest run
             $artifacts = gh run view $latestRun.id --json=artifacts | ConvertFrom-Json
-            $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" } | Select-Object -First 1
+            
+            Write-Host "Available artifacts in latest run $($latestRun.id):" -ForegroundColor Cyan
+            if ($artifacts.artifacts.Count -gt 0) {
+              foreach ($artifact in $artifacts.artifacts) {
+                Write-Host "  - $($artifact.name) ($(($artifact.sizeInBytes / 1MB).ToString('F1')) MB)" -ForegroundColor White
+              }
+            } else {
+              Write-Host "  No artifacts found" -ForegroundColor Yellow
+            }
+            
+            # Try to find Windows/ISO related artifact with expanded patterns  
+            $isoArtifact = $artifacts.artifacts | Where-Object { 
+              $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" 
+            } | Select-Object -First 1
+            
+            # If no Windows-specific artifact found, try any artifact that could contain an ISO
+            if (-not $isoArtifact) {
+              Write-Host "No Windows-specific artifact found, checking all artifacts..." -ForegroundColor Yellow
+              $isoArtifact = $artifacts.artifacts | Where-Object { 
+                $_.sizeInBytes -gt 1GB  # Assume ISO files are larger than 1GB
+              } | Select-Object -First 1
+            }
+            
+            # Last resort: take the largest artifact
+            if (-not $isoArtifact -and $artifacts.artifacts.Count -gt 0) {
+              Write-Host "Taking largest artifact as fallback..." -ForegroundColor Yellow
+              $isoArtifact = $artifacts.artifacts | Sort-Object sizeInBytes -Descending | Select-Object -First 1
+            }
             
             if (-not $isoArtifact) {
-              throw "No Windows artifact found in run $($latestRun.id)"
+              throw "No suitable artifacts found in run $($latestRun.id)"
             }
+            
+            Write-Host "Selected artifact: $($isoArtifact.name)" -ForegroundColor Green
             
             echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
             echo "RUN_ID=$($latestRun.id)" >> $env:GITHUB_OUTPUT
@@ -119,11 +151,40 @@ jobs:
           try {
             # Get artifacts from the run
             $artifacts = gh run view $runId --json=artifacts | ConvertFrom-Json
-            $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" } | Select-Object -First 1
+            
+            Write-Host "Available artifacts in run $runId`:" -ForegroundColor Cyan
+            if ($artifacts.artifacts.Count -gt 0) {
+              foreach ($artifact in $artifacts.artifacts) {
+                Write-Host "  - $($artifact.name) ($(($artifact.sizeInBytes / 1MB).ToString('F1')) MB)" -ForegroundColor White
+              }
+            } else {
+              Write-Host "  No artifacts found" -ForegroundColor Yellow
+            }
+            
+            # Try to find Windows/ISO related artifact with expanded patterns
+            $isoArtifact = $artifacts.artifacts | Where-Object { 
+              $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" 
+            } | Select-Object -First 1
+            
+            # If no Windows-specific artifact found, try any artifact that could contain an ISO
+            if (-not $isoArtifact) {
+              Write-Host "No Windows-specific artifact found, checking all artifacts..." -ForegroundColor Yellow
+              $isoArtifact = $artifacts.artifacts | Where-Object { 
+                $_.sizeInBytes -gt 1GB  # Assume ISO files are larger than 1GB
+              } | Select-Object -First 1
+            }
+            
+            # Last resort: take the largest artifact
+            if (-not $isoArtifact -and $artifacts.artifacts.Count -gt 0) {
+              Write-Host "Taking largest artifact as fallback..." -ForegroundColor Yellow
+              $isoArtifact = $artifacts.artifacts | Sort-Object sizeInBytes -Descending | Select-Object -First 1
+            }
             
             if (-not $isoArtifact) {
-              throw "No Windows artifact found in run $runId"
+              throw "No suitable artifacts found in run $runId"
             }
+            
+            Write-Host "Selected artifact: $($isoArtifact.name)" -ForegroundColor Green
             
             echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
             echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
@@ -175,14 +236,16 @@ jobs:
         elseif ($currentArtifactName -match "24h2|26100") { $detectedBuild = "26100" }
         elseif ($currentArtifactName -match "22h2|22621") { $detectedBuild = "22621" }
         elseif ($currentArtifactName -match "21h2|22000") { $detectedBuild = "22000" }
-        elseif ($currentArtifactName -match "windows-11") { $detectedBuild = "22631" }  # Default for Windows 11
+        elseif ($currentArtifactName -match "windows-11|win11") { $detectedBuild = "22631" }  # Default for Windows 11
+        elseif ($currentArtifactName -match "windows-2022|win2022|server") { $detectedBuild = "20348" }  # Windows Server 2022
         
         if ($detectedBuild) {
           Write-Host "Auto-detected Windows build: $detectedBuild" -ForegroundColor Green
           echo "DETECTED_BUILD=$detectedBuild" >> $env:GITHUB_OUTPUT
         } else {
-          Write-Host "Could not auto-detect Windows build from artifact name" -ForegroundColor Yellow
-          echo "DETECTED_BUILD=22631" >> $env:GITHUB_OUTPUT  # Default fallback
+          Write-Host "Could not auto-detect Windows build from artifact name, using default" -ForegroundColor Yellow
+          Write-Host "Artifact name: '$currentArtifactName'" -ForegroundColor Yellow
+          echo "DETECTED_BUILD=22631" >> $env:GITHUB_OUTPUT  # Default fallback to Windows 11 23H2
         }
       env:
         GH_TOKEN: ${{ github.token }}
