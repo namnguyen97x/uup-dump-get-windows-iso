@@ -8,8 +8,9 @@ This must be executed in a Windows 2022 host.
 
 This supports the following Windows Editions:
 
-* `windows-11`: Windows 11 22631 (aka 23H2) Enterprise
 * `windows-2022`: Windows Server 2022 20348 (aka 21H2) Standard
+
+**Note:** Windows 11 editions are currently disabled due to UUP dump server availability issues. Only Windows Server 2022 builds are reliable at this time.
 
 **NB** The Windows Server 2019 iso source files are not available in the Unified Update Platform (UUP) and cannot be downloaded by UUP dump.
 
@@ -32,7 +33,6 @@ Create the Windows ISO files using a vagrant managed VM:
 ```bash
 ./build.sh create-vm
 ./build.sh create-iso windows-2022
-./build.sh create-iso windows-11
 ./build.sh destroy-vm
 ```
 
