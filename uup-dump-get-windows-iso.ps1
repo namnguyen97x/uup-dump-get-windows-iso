@@ -17,11 +17,11 @@ trap {
 $TARGETS = @{
     # see https://en.wikipedia.org/wiki/Windows_11
     # see https://en.wikipedia.org/wiki/Windows_11_version_history
-    # "windows-11-23h2" = @{
-    #     search = "windows 11 22631 amd64" # aka 23H2. Enterprise EOL: November 10, 2026.
-    #     edition = "Professional"
-    #     virtualEdition = $null
-    # }
+    "windows-11-23h2" = @{
+        search = "windows 11 22631 amd64" # aka 23H2. Enterprise EOL: November 10, 2026.
+        edition = "Professional"
+        virtualEdition = $null
+    }
     # "windows-11-24h2" = @{
     #     # Windows 11, version 24H2 (26100.4482) amd64, Professional/Enterprise
     #     # UUP dump link: https://uupdump.net/download.php?id=a65e5849-be58-42a1-aa4d-9a85f2b8c158&pack=en-us&edition=professional
