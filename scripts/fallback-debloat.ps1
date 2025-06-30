@@ -171,7 +171,10 @@ $extractDir = "$tempDir\extract"
 New-Item -ItemType Directory -Path $tempDir, $mountDir, $extractDir -Force | Out-Null
 
 try {
+    Write-Log "=== BEGINNING WINDOWS LITE PROCESSING STAGES ===" "SUCCESS"
+    
     # === EXTRACT ISO ===
+    Write-Log "STAGE 1: Extracting ISO..." "SUCCESS"
     Write-Log "Mounting ISO file: $isoPath" "INFO"
     
     try {
@@ -205,15 +208,39 @@ try {
     Write-Log "Dismounting ISO..." "INFO"
     Dismount-DiskImage -ImagePath $isoPath -ErrorAction Stop
     
+    Write-Log "✅ STAGE 1 COMPLETE: ISO extraction successful" "SUCCESS"
+    
     # === BIGGEST SPACE SAVER: SINGLE EDITION EXPORT ===
+    Write-Log "STAGE 2: Processing Windows image..." "SUCCESS"
     $installWim = "$extractDir\sources\install.wim"
     $installEsd = "$extractDir\sources\install.esd"
     
+    Write-Log "Checking for install.wim/esd files..." "INFO"
+    Write-Log "  install.wim exists: $(Test-Path $installWim)" "INFO"
+    Write-Log "  install.esd exists: $(Test-Path $installEsd)" "INFO"
+    
     if (Test-Path $installEsd) {
         Write-Log "Converting ESD to WIM..." "INFO"
-        & dism /export-image /sourceimagefile:"$installEsd" /sourceindex:1 /destinationimagefile:"$installWim" /compress:max
-        Test-DismSuccess "ESD conversion"
-        Remove-Item $installEsd -Force
+        try {
+            & dism /export-image /sourceimagefile:"$installEsd" /sourceindex:1 /destinationimagefile:"$installWim" /compress:max
+            Test-DismSuccess "ESD conversion"
+            Remove-Item $installEsd -Force
+            Write-Log "✅ ESD to WIM conversion successful" "SUCCESS"
+        } catch {
+            Write-Log "❌ ESD conversion failed: $($_.Exception.Message)" "ERROR"
+            throw
+        }
+    } elseif (-not (Test-Path $installWim)) {
+        Write-Log "❌ CRITICAL: No install.wim or install.esd found in sources directory" "ERROR"
+        Write-Log "Sources directory contents:" "ERROR"
+        if (Test-Path "$extractDir\sources") {
+            Get-ChildItem "$extractDir\sources" | ForEach-Object {
+                Write-Log "  $($_.Name) ($([math]::Round($_.Length / 1MB, 1)) MB)" "ERROR"
+            }
+        } else {
+            Write-Log "Sources directory does not exist!" "ERROR"
+        }
+        throw "No Windows installation image found"
     }
     
     # Check editions and export single one if multiple exist
@@ -231,10 +258,20 @@ try {
         Write-Log "✅ MASSIVE SAVINGS: Removed $($editions - 1) extra editions!" "SUCCESS"
     }
     
+    Write-Log "✅ STAGE 2 COMPLETE: Windows image processing successful" "SUCCESS"
+    
     # === MOUNT AND DEBLOAT WIM ===
+    Write-Log "STAGE 3: Debloating Windows image..." "SUCCESS"
     Write-Log "Mounting WIM for debloating..." "INFO"
-    & dism /mount-wim /wimfile:"$installWim" /index:1 /mountdir:"$mountDir"
-    Test-DismSuccess "WIM mount"
+    
+    try {
+        & dism /mount-wim /wimfile:"$installWim" /index:1 /mountdir:"$mountDir"
+        Test-DismSuccess "WIM mount"
+        Write-Log "✅ WIM mounted successfully at: $mountDir" "SUCCESS"
+    } catch {
+        Write-Log "❌ WIM mount failed: $($_.Exception.Message)" "ERROR"
+        throw
+    }
     
     # Remove major bloatware packages
     $bloatApps = @(
@@ -295,10 +332,26 @@ try {
     }
     Write-Log "Directory cleanup: $([math]::Round($totalCleaned/1MB, 1)) MB" "SUCCESS"
     
+    Write-Log "✅ STAGE 3 COMPLETE: Debloating successful ($removed apps, $capRemoved capabilities, $([math]::Round($totalCleaned/1MB, 1)) MB cleaned)" "SUCCESS"
+    
     # === COMMIT AND CREATE ISO ===
+    Write-Log "STAGE 4: Committing changes and creating ISO..." "SUCCESS"
     Write-Log "Committing WIM changes..." "INFO"
-    & dism /unmount-wim /mountdir:"$mountDir" /commit
-    Test-DismSuccess "WIM commit"
+    
+    try {
+        & dism /unmount-wim /mountdir:"$mountDir" /commit
+        Test-DismSuccess "WIM commit"
+        Write-Log "✅ WIM changes committed successfully" "SUCCESS"
+    } catch {
+        Write-Log "❌ WIM commit failed: $($_.Exception.Message)" "ERROR"
+        Write-Log "Attempting to discard mount and continue..." "WARNING"
+        try {
+            & dism /unmount-wim /mountdir:"$mountDir" /discard
+        } catch {
+            Write-Log "Failed to discard mount as well" "ERROR"
+        }
+        throw
+    }
     
     # Create autounattend for hardware bypasses
     $autounattend = @"
@@ -333,9 +386,24 @@ try {
     Set-Content -Path "$extractDir\autounattend.xml" -Value $autounattend -Encoding UTF8
     
     # Create ISO
-    Write-Log "Creating Windows Lite ISO..." "INFO"
+    Write-Log "STAGE 5: Creating Windows Lite ISO..." "SUCCESS"
+    Write-Log "Output path will be: $outputISO" "INFO"
+    
+    # Verify extract directory has content
+    if (-not (Test-Path $extractDir)) {
+        throw "Extract directory missing: $extractDir"
+    }
+    
+    $extractDirSize = (Get-ChildItem $extractDir -Recurse -File | Measure-Object Length -Sum).Sum / 1GB
+    Write-Log "Extract directory size: $([math]::Round($extractDirSize, 2)) GB" "INFO"
+    Write-Log "Extract directory contents:" "INFO"
+    Get-ChildItem $extractDir | ForEach-Object {
+        $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
+        Write-Log "  $($_.Name) ($size)" "INFO"
+    }
     
     # Method 1: Try oscdimg (Windows Assessment and Deployment Kit)
+    Write-Log "Method 1: Trying oscdimg (Windows Assessment and Deployment Kit)..." "INFO"
     $oscdimg = "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
     $oscdimgAlt = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
     
@@ -364,14 +432,26 @@ try {
         Write-Log "Creating bootable ISO with oscdimg..." "INFO"
         
         try {
+            Write-Log "Checking required boot files..." "INFO"
+            $etfsboot = "$extractDir\boot\etfsboot.com"
+            $efisys = "$extractDir\efi\microsoft\boot\efisys.bin"
+            Write-Log "  etfsboot.com exists: $(Test-Path $etfsboot)" "INFO"
+            Write-Log "  efisys.bin exists: $(Test-Path $efisys)" "INFO"
+            
             # Create bootable ISO with proper boot sectors
-            $result = & $oscdimgPath -m -o -u2 -udfver102 -bootdata:2#p0,e,b"$extractDir\boot\etfsboot.com"#pEF,e,b"$extractDir\efi\microsoft\boot\efisys.bin" "$extractDir" "$outputISO" 2>&1
+            Write-Log "Executing oscdimg command..." "INFO"
+            $result = & $oscdimgPath -m -o -u2 -udfver102 -bootdata:2#p0,e,b"$etfsboot"#pEF,e,b"$efisys" "$extractDir" "$outputISO" 2>&1
+            
+            Write-Log "oscdimg exit code: $LASTEXITCODE" "INFO"
+            Write-Log "oscdimg output: $result" "INFO"
+            Write-Log "Output file exists after oscdimg: $(Test-Path $outputISO)" "INFO"
             
             if ($LASTEXITCODE -eq 0 -and (Test-Path $outputISO)) {
-                Write-Log "✅ Bootable ISO created successfully with oscdimg" "SUCCESS"
+                $outputSize = (Get-Item $outputISO).Length / 1MB
+                Write-Log "✅ Bootable ISO created successfully with oscdimg ($([math]::Round($outputSize, 1)) MB)" "SUCCESS"
             } else {
                 Write-Log "⚠️ oscdimg failed (Exit: $LASTEXITCODE), trying alternative method..." "WARNING"
-                if ($result) { Write-Log "oscdimg output: $result" "WARNING" }
+                if ($result) { Write-Log "oscdimg detailed output: $result" "WARNING" }
                 throw "oscdimg failed"
             }
         } catch {
@@ -380,11 +460,13 @@ try {
             
             # Method 2: PowerShell COM method for ISO creation
             try {
-                Write-Log "Using PowerShell COM method for ISO creation..." "INFO"
+                Write-Log "Method 2: Using PowerShell COM method for ISO creation..." "INFO"
                 
+                Write-Log "Creating COM objects..." "INFO"
                 $isoFile = New-Object -ComObject IMAPI2.MsftDiscMaster2
                 $recorder = New-Object -ComObject IMAPI2.MsftDiscRecorder2
                 $fileSystemImage = New-Object -ComObject IMAPI2.MsftFileSystemImage
+                Write-Log "✅ COM objects created successfully" "SUCCESS"
                 
                 $fileSystemImage.FileSystemsToCreate = 3  # UDF + ISO9660
                 $fileSystemImage.VolumeName = "Windows_Lite"
@@ -413,10 +495,13 @@ try {
                 Add-FilesToImage $extractDir $rootDir
                 
                 # Create ISO
+                Write-Log "Creating result image..." "INFO"
                 $fileSystemImage.CreateResultImage()
                 $resultImage = $fileSystemImage.ResultImageStream
+                Write-Log "✅ Result image created" "SUCCESS"
                 
                 # Save to file
+                Write-Log "Saving to file: $outputISO" "INFO"
                 $targetStream = New-Object -ComObject ADODB.Stream
                 $targetStream.Open()
                 $targetStream.Type = 1  # Binary
@@ -424,7 +509,12 @@ try {
                 $targetStream.SaveToFile($outputISO, 2)  # Overwrite
                 $targetStream.Close()
                 
-                Write-Log "✅ ISO created successfully with PowerShell COM method" "SUCCESS"
+                if (Test-Path $outputISO) {
+                    $outputSize = (Get-Item $outputISO).Length / 1MB
+                    Write-Log "✅ ISO created successfully with PowerShell COM method ($([math]::Round($outputSize, 1)) MB)" "SUCCESS"
+                } else {
+                    throw "COM method completed but no output file found"
+                }
                 
             } catch {
                 Write-Log "⚠️ PowerShell COM method failed: $($_.Exception.Message)" "WARNING"
@@ -433,28 +523,53 @@ try {
                 Write-Log "Using directory-based approach..." "INFO"
                 
                 try {
+                    Write-Log "Method 3: Directory-based approach with compression..." "INFO"
+                    
                     # Verify we have a proper Windows directory structure
                     $requiredPaths = @("$extractDir\sources\install.wim", "$extractDir\boot", "$extractDir\efi")
+                    Write-Log "Verifying Windows directory structure..." "INFO"
+                    
                     $missingPaths = $requiredPaths | Where-Object { -not (Test-Path $_) }
                     
                     if ($missingPaths) {
                         Write-Log "❌ Missing required paths for Windows ISO: $($missingPaths -join ', ')" "ERROR"
+                        Write-Log "Available paths in extract directory:" "ERROR"
+                        Get-ChildItem $extractDir | ForEach-Object {
+                            Write-Log "  $($_.Name)" "ERROR"
+                        }
                         throw "Invalid Windows directory structure"
                     }
+                    Write-Log "✅ Windows directory structure verified" "SUCCESS"
                     
                     # Create a compressed archive that preserves the Windows structure
                     Write-Log "Creating compressed Windows Lite package..." "INFO"
                     $packagePath = $outputISO -replace '\.iso$', '_WindowsLite.zip'
                     
                     # Use System.IO.Compression for better control
+                    Write-Log "Loading compression assembly..." "INFO"
                     Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    
+                    Write-Log "Creating archive from directory..." "INFO"
                     [System.IO.Compression.ZipFile]::CreateFromDirectory($extractDir, $packagePath, 'Optimal', $true)
                     
+                    if (Test-Path $packagePath) {
+                        $packageSize = (Get-Item $packagePath).Length / 1MB
+                        Write-Log "✅ Compressed package created: $([math]::Round($packageSize, 1)) MB" "SUCCESS"
+                    } else {
+                        throw "Failed to create compressed package"
+                    }
+                    
                     # Also create a basic ISO-like file that tools can mount
+                    Write-Log "Copying package as ISO file..." "INFO"
                     Copy-Item $packagePath $outputISO -Force
                     
-                    Write-Log "✅ Windows Lite package created: $packagePath" "SUCCESS"
-                    Write-Log "✅ Alternative ISO created: $outputISO" "SUCCESS"
+                    if (Test-Path $outputISO) {
+                        $outputSize = (Get-Item $outputISO).Length / 1MB
+                        Write-Log "✅ Windows Lite package created: $packagePath" "SUCCESS"
+                        Write-Log "✅ Alternative ISO created: $outputISO ($([math]::Round($outputSize, 1)) MB)" "SUCCESS"
+                    } else {
+                        throw "Failed to copy package to output location"
+                    }
                     
                 } catch {
                     Write-Log "❌ All ISO creation methods failed: $($_.Exception.Message)" "ERROR"
@@ -488,23 +603,40 @@ try {
             
             # Fallback: Create properly structured Windows package
             try {
-                Write-Log "Creating structured Windows Lite package..." "INFO"
+                Write-Log "Final Fallback: Creating structured Windows Lite package..." "INFO"
                 
                 # Verify Windows structure
+                Write-Log "Verifying Windows installation files..." "INFO"
                 if (-not (Test-Path "$extractDir\sources\install.wim")) {
+                    Write-Log "❌ Missing install.wim - not a valid Windows image" "ERROR"
+                    Write-Log "Sources directory contents:" "ERROR"
+                    if (Test-Path "$extractDir\sources") {
+                        Get-ChildItem "$extractDir\sources" | ForEach-Object {
+                            Write-Log "  $($_.Name)" "ERROR"
+                        }
+                    }
                     throw "Missing install.wim - not a valid Windows image"
                 }
+                Write-Log "✅ install.wim found" "SUCCESS"
                 
                 if (-not (Test-Path "$extractDir\boot\bcd")) {
                     Write-Log "⚠️ Missing boot\bcd - ISO may not be bootable" "WARNING"
+                } else {
+                    Write-Log "✅ boot\bcd found" "SUCCESS"
                 }
                 
                 # Create the output using native PowerShell compression
+                Write-Log "Creating compressed archive using .NET framework..." "INFO"
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
                 [System.IO.Compression.ZipFile]::CreateFromDirectory($extractDir, $outputISO, 'Optimal', $true)
                 
-                Write-Log "✅ Windows Lite package created successfully" "SUCCESS"
-                Write-Log "⚠️ Note: Package may need manual extraction for installation" "WARNING"
+                if (Test-Path $outputISO) {
+                    $outputSize = (Get-Item $outputISO).Length / 1MB
+                    Write-Log "✅ Windows Lite package created successfully ($([math]::Round($outputSize, 1)) MB)" "SUCCESS"
+                    Write-Log "⚠️ Note: Package may need manual extraction for installation" "WARNING"
+                } else {
+                    throw "Failed to create compressed package file"
+                }
                 
             } catch {
                 Write-Log "❌ Fallback method failed: $($_.Exception.Message)" "ERROR"
@@ -587,6 +719,7 @@ try {
     } else {
         Write-Log "❌ CRITICAL FAILURE: Output ISO not created" "ERROR"
         Write-Log "Expected location: $outputISO" "ERROR"
+        Write-Log "Working directory: $(Get-Location)" "ERROR"
         
         # Debug: Check what files were actually created
         Write-Log "Files in current directory:" "ERROR"
@@ -602,6 +735,23 @@ try {
                 $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
                 Write-Log "  $($_.Name) ($size)" "ERROR"
             }
+            
+            # Check extract directory specifically
+            if (Test-Path $extractDir) {
+                Write-Log "Files in extract directory ($extractDir):" "ERROR"
+                Get-ChildItem $extractDir -ErrorAction SilentlyContinue | ForEach-Object {
+                    $size = if ($_.PSIsContainer) { "DIR" } else { "$([math]::Round($_.Length / 1MB, 1)) MB" }
+                    Write-Log "  $($_.Name) ($size)" "ERROR"
+                }
+            }
+        } else {
+            Write-Log "Temp directory no longer exists" "ERROR"
+        }
+        
+        # Look for any ZIP or ISO files that might have been created with different names
+        Write-Log "Looking for any ISO/ZIP files in current directory:" "ERROR"
+        Get-ChildItem . -Include "*.iso", "*.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Log "  Found: $($_.Name) ($([math]::Round($_.Length / 1MB, 1)) MB)" "ERROR"
         }
         
         exit 1
