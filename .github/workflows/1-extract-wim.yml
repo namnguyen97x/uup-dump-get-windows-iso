@@ -111,6 +111,29 @@ jobs:
             throw "Failed to find latest workflow: $_"
           }
           
+        } elseif ($sourceInput -match "github\.com.*?/actions/runs/(\d+)") {
+          # GitHub Actions run URL - Check this BEFORE generic URL pattern
+          $runId = $matches[1]
+          Write-Host "Extracted run ID from GitHub URL: $runId" -ForegroundColor Green
+          
+          try {
+            # Get artifacts from the run
+            $artifacts = gh run view $runId --json=artifacts | ConvertFrom-Json
+            $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" } | Select-Object -First 1
+            
+            if (-not $isoArtifact) {
+              throw "No Windows artifact found in run $runId"
+            }
+            
+            echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
+            echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
+            echo "ARTIFACT_NAME=$($isoArtifact.name)" >> $env:GITHUB_OUTPUT
+            $currentArtifactName = $isoArtifact.name
+            
+          } catch {
+            throw "Failed to get artifacts from run $runId`: $_"
+          }
+          
         } elseif ($sourceInput -match "^(\d+):(.+)$") {
           # Format: run_id:artifact_name
           $runId = $matches[1]
@@ -123,7 +146,7 @@ jobs:
           $currentArtifactName = $artifactName
           
         } elseif ($sourceInput -match "^https?://") {
-          # Direct URL
+          # Direct URL (non-GitHub)
           Write-Host "Using direct URL: $sourceInput" -ForegroundColor Green
           echo "DOWNLOAD_METHOD=direct_url" >> $env:GITHUB_OUTPUT
           echo "ARTIFACT_URL=$sourceInput" >> $env:GITHUB_OUTPUT
@@ -139,24 +162,6 @@ jobs:
             $currentArtifactName = "windows-iso"
             echo "ARTIFACT_NAME=windows-iso" >> $env:GITHUB_OUTPUT
           }
-          
-        } elseif ($sourceInput -match "github\.com.*?/actions/runs/(\d+)") {
-          # GitHub Actions run URL
-          $runId = $matches[1]
-          Write-Host "Extracted run ID from GitHub URL: $runId" -ForegroundColor Green
-          
-          # Get artifacts from the run
-          $artifacts = gh run view $runId --json=artifacts | ConvertFrom-Json
-          $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" } | Select-Object -First 1
-          
-          if (-not $isoArtifact) {
-            throw "No Windows artifact found in run $runId"
-          }
-          
-          echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
-          echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
-          echo "ARTIFACT_NAME=$($isoArtifact.name)" >> $env:GITHUB_OUTPUT
-          $currentArtifactName = $isoArtifact.name
           
         } else {
           throw "Invalid input format. Use: 'latest', 'run_id:artifact_name', 'direct_url', or GitHub Actions run URL"
