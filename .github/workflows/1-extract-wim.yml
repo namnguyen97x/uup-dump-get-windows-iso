@@ -1,20 +1,32 @@
 name: 1. Extract WIM from ISO
 
-# This workflow downloads ISO artifacts from previous workflow runs
+# This workflow downloads ISO artifacts from various sources
 # and extracts WIM files for Enterprise G processing
 # 
 # Usage examples:
-# - "latest": Uses the latest successful build workflow artifact
-# - "15851372572:windows-11-23h2": Uses specific run ID and artifact name
+# 1. "latest": Uses the latest successful build workflow artifact
+# 2. "run_id:artifact_name": Uses specific run ID and artifact name
+#    - artifact_details: "15851372572:windows-11-23h2"
+# 3. "manual_link": Uses direct artifact download URL
+#    - artifact_details: "https://github.com/user/repo/artifacts/download/123"
 # - Auto-detects Windows version from artifact name (23h2, 24h2, etc.)
 
 on:
   workflow_dispatch:
     inputs:
       artifact_source:
-        description: 'Artifact Source (run_id:artifact_name or latest)'
+        description: 'Artifact Source'
         required: true
         default: 'latest'
+        type: choice
+        options:
+        - 'latest'
+        - 'run_id:artifact_name'
+        - 'manual_link'
+      artifact_details:
+        description: 'Details (run_id:artifact_name OR artifact_url)'
+        required: false
+        default: ''
         type: string
       target_build:
         description: 'Target Windows Build (auto-detect if not specified)'
@@ -33,6 +45,7 @@ on:
 
 env:
   ARTIFACT_SOURCE: ${{ github.event.inputs.artifact_source || 'latest' }}
+  ARTIFACT_DETAILS: ${{ github.event.inputs.artifact_details || '' }}
   TARGET_BUILD: ${{ github.event.inputs.target_build || '' }}
 
 jobs:
@@ -68,6 +81,7 @@ jobs:
       shell: powershell
       run: |
         $artifactSource = "$env:ARTIFACT_SOURCE"
+        $artifactDetails = "$env:ARTIFACT_DETAILS"
         Write-Host "Parsing artifact source: $artifactSource" -ForegroundColor Green
         
         if ($artifactSource -eq "latest") {
@@ -90,29 +104,54 @@ jobs:
             throw "No Windows ISO artifact found in latest run"
           }
           
+          echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
           echo "RUN_ID=$($latestRun.id)" >> $env:GITHUB_OUTPUT
           echo "ARTIFACT_NAME=$($isoArtifact.name)" >> $env:GITHUB_OUTPUT
+          $currentArtifactName = $isoArtifact.name
           
-        } elseif ($artifactSource -match "^(\d+):(.+)$") {
-          # Format: run_id:artifact_name
-          $runId = $matches[1]
-          $artifactName = $matches[2]
+        } elseif ($artifactSource -eq "run_id:artifact_name") {
+          # Format: run_id:artifact_name from artifact_details
+          if (-not $artifactDetails) {
+            throw "Artifact details required for run_id:artifact_name format"
+          }
           
-          Write-Host "Using specified run ID: $runId, artifact: $artifactName" -ForegroundColor Green
-          echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
-          echo "ARTIFACT_NAME=$artifactName" >> $env:GITHUB_OUTPUT
+          if ($artifactDetails -match "^(\d+):(.+)$") {
+            $runId = $matches[1]
+            $artifactName = $matches[2]
+            
+            Write-Host "Using specified run ID: $runId, artifact: $artifactName" -ForegroundColor Green
+            echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
+            echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
+            echo "ARTIFACT_NAME=$artifactName" >> $env:GITHUB_OUTPUT
+            $currentArtifactName = $artifactName
+          } else {
+            throw "Invalid format in artifact_details. Use 'run_id:artifact_name'"
+          }
+          
+        } elseif ($artifactSource -eq "manual_link") {
+          # Direct artifact URL from artifact_details
+          if (-not $artifactDetails) {
+            throw "Artifact URL required for manual_link"
+          }
+          
+          if ($artifactDetails -match "^https?://") {
+            Write-Host "Using manual artifact URL: $artifactDetails" -ForegroundColor Green
+            echo "DOWNLOAD_METHOD=direct_url" >> $env:GITHUB_OUTPUT
+            echo "ARTIFACT_URL=$artifactDetails" >> $env:GITHUB_OUTPUT
+            
+            # Extract artifact name from URL for version detection
+            $urlName = [System.IO.Path]::GetFileNameWithoutExtension([System.Uri]::new($artifactDetails).Segments[-1])
+            $currentArtifactName = $urlName
+            echo "ARTIFACT_NAME=$urlName" >> $env:GITHUB_OUTPUT
+          } else {
+            throw "Invalid URL format in artifact_details. Must start with http:// or https://"
+          }
           
         } else {
-          throw "Invalid artifact source format. Use 'latest' or 'run_id:artifact_name'"
+          throw "Invalid artifact source. Choose: latest, run_id:artifact_name, or manual_link"
         }
         
         # Auto-detect Windows version from artifact name
-        $currentArtifactName = if ($artifactSource -eq "latest") { 
-          $isoArtifact.name 
-        } else { 
-          $artifactName 
-        }
-        
         Write-Host "Detecting Windows version from artifact: $currentArtifactName" -ForegroundColor Cyan
         
         $detectedBuild = ""
@@ -120,6 +159,7 @@ jobs:
         elseif ($currentArtifactName -match "24h2|26100") { $detectedBuild = "26100" }
         elseif ($currentArtifactName -match "22h2|22621") { $detectedBuild = "22621" }
         elseif ($currentArtifactName -match "21h2|22000") { $detectedBuild = "22000" }
+        elseif ($currentArtifactName -match "windows-11") { $detectedBuild = "22631" }  # Default for Windows 11
         
         if ($detectedBuild) {
           Write-Host "Auto-detected Windows build: $detectedBuild" -ForegroundColor Green
@@ -133,14 +173,39 @@ jobs:
     - name: Download ISO Artifact
       shell: powershell
       run: |
-        $runId = "${{ steps.parse-source.outputs.RUN_ID }}"
+        $downloadMethod = "${{ steps.parse-source.outputs.DOWNLOAD_METHOD }}"
         $artifactName = "${{ steps.parse-source.outputs.ARTIFACT_NAME }}"
         
-        Write-Host "Downloading artifact '$artifactName' from run $runId..." -ForegroundColor Green
-        
         try {
-          # Download artifact
-          gh run download $runId --name "$artifactName" --dir "artifacts"
+          if ($downloadMethod -eq "gh_cli") {
+            # Download using GitHub CLI
+            $runId = "${{ steps.parse-source.outputs.RUN_ID }}"
+            
+            Write-Host "Downloading artifact '$artifactName' from run $runId using GitHub CLI..." -ForegroundColor Green
+            gh run download $runId --name "$artifactName" --dir "artifacts"
+            
+          } elseif ($downloadMethod -eq "direct_url") {
+            # Download using direct URL
+            $artifactUrl = "${{ steps.parse-source.outputs.ARTIFACT_URL }}"
+            
+            Write-Host "Downloading artifact from URL: $artifactUrl" -ForegroundColor Green
+            
+            # Create temp filename
+            $fileName = if ($artifactUrl -match "\.zip$") { "artifact.zip" } else { "artifact.bin" }
+            $tempFile = Join-Path "artifacts" $fileName
+            
+            # Download using PowerShell
+            Invoke-WebRequest -Uri $artifactUrl -OutFile $tempFile -Headers @{"User-Agent"="GitHub-Actions"}
+            
+            # If it's a zip file, extract it
+            if ($fileName -eq "artifact.zip") {
+              Expand-Archive -Path $tempFile -DestinationPath "artifacts" -Force
+              Remove-Item $tempFile -Force
+            }
+            
+          } else {
+            throw "Unknown download method: $downloadMethod"
+          }
           
           # Find ISO file in downloaded artifact
           $isoFile = Get-ChildItem -Path "artifacts" -Filter "*.iso" -Recurse | Select-Object -First 1
@@ -155,8 +220,13 @@ jobs:
           } else {
             throw "No ISO file found in artifact"
           }
+          
         } catch {
           Write-Host "Download failed: $_" -ForegroundColor Red
+          Write-Host "Download Method: $downloadMethod" -ForegroundColor Yellow
+          if ($downloadMethod -eq "direct_url") {
+            Write-Host "Artifact URL: ${{ steps.parse-source.outputs.ARTIFACT_URL }}" -ForegroundColor Yellow
+          }
           exit 1
         }
       env:
