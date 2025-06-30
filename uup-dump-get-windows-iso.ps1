@@ -304,7 +304,7 @@ function Get-WindowsIso($name, $destinationDirectory) {
     Pop-Location
 
     # Check if ISO was created successfully
-    $isoFiles = Get-ChildItem -Path $buildDirectory -Filter "*.iso"
+    $isoFiles = @(Get-ChildItem -Path $buildDirectory -Filter "*.iso" -ErrorAction SilentlyContinue)
     if ($isoFiles.Count -eq 0) {
         throw "ISO creation failed - no ISO file found in $buildDirectory. Check the UUP converter logs above for details."
     }
