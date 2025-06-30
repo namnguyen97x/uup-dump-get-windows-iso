@@ -3,50 +3,28 @@ name: 1. Extract WIM from ISO
 # This workflow downloads ISO artifacts from various sources
 # and extracts WIM files for Enterprise G processing
 # 
-# Usage examples:
-# 1. "latest": Uses the latest successful build workflow artifact
-# 2. "run_id:artifact_name": Uses specific run ID and artifact name
-#    - artifact_details: "15851372572:windows-11-23h2"
-# 3. "manual_link": Uses direct artifact download URL
-#    - artifact_details: "https://github.com/user/repo/artifacts/download/123"
-# - Auto-detects Windows version from artifact name (23h2, 24h2, etc.)
+# Single input field accepts:
+# 1. "latest" - Uses the latest successful workflow artifact
+# 2. "15851372572:windows-11-23h2" - run_id:artifact_name format
+# 3. "https://github.com/user/repo/actions/runs/123" - GitHub Actions run URL
+# 4. "https://direct-download-url.com/file.zip" - Direct download URL
+# 
+# Auto-detects Windows version from artifact name (23h2, 24h2, etc.)
 
 on:
   workflow_dispatch:
     inputs:
-      artifact_source:
-        description: 'Artifact Source'
+      source_input:
+        description: 'Enter: "latest" OR run_id:artifact_name OR direct_url'
         required: true
         default: 'latest'
-        type: choice
-        options:
-        - 'latest'
-        - 'run_id:artifact_name'
-        - 'manual_link'
-      artifact_details:
-        description: 'Details (run_id:artifact_name OR artifact_url)'
-        required: false
-        default: ''
         type: string
-      target_build:
-        description: 'Target Windows Build (auto-detect if not specified)'
-        required: false
-        default: ''
-        type: choice
-        options:
-        - ''
-        - '22631'
-        - '26100' 
-        - '22621'
-        - '22000'
   
   schedule:
     - cron: '0 2 * * 0'  # Weekly Sunday 2AM UTC
 
 env:
-  ARTIFACT_SOURCE: ${{ github.event.inputs.artifact_source || 'latest' }}
-  ARTIFACT_DETAILS: ${{ github.event.inputs.artifact_details || '' }}
-  TARGET_BUILD: ${{ github.event.inputs.target_build || '' }}
+  SOURCE_INPUT: ${{ github.event.inputs.source_input || 'latest' }}
 
 jobs:
   extract-wim:
@@ -76,79 +54,112 @@ jobs:
         $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
         Write-Host "Available disk space: $freeGB GB" -ForegroundColor Cyan
     
-    - name: Parse Artifact Source
+    - name: Parse Source Input
       id: parse-source
       shell: powershell
       run: |
-        $artifactSource = "$env:ARTIFACT_SOURCE"
-        $artifactDetails = "$env:ARTIFACT_DETAILS"
-        Write-Host "Parsing artifact source: $artifactSource" -ForegroundColor Green
+        $sourceInput = "$env:SOURCE_INPUT".Trim()
+        Write-Host "Parsing source input: $sourceInput" -ForegroundColor Green
         
-        if ($artifactSource -eq "latest") {
+        if ($sourceInput -eq "latest") {
           # Find latest successful build workflow
           Write-Host "Finding latest build workflow..." -ForegroundColor Cyan
-          $workflows = gh run list --workflow="build.yml" --status="success" --limit=10 --json=id,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
           
-          if ($workflows.Count -eq 0) {
-            throw "No successful build workflows found"
+          try {
+            $workflows = gh run list --workflow="build.yml" --status="success" --limit=10 --json=id,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
+            
+            if ($workflows.Count -eq 0) {
+              Write-Host "No successful 'build.yml' workflows found. Trying other workflows..." -ForegroundColor Yellow
+              
+              # Try to find any successful workflow with artifacts
+              $allWorkflows = gh run list --status="success" --limit=20 --json=id,workflowName,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
+              $workflowsWithArtifacts = @()
+              
+              foreach ($workflow in $allWorkflows) {
+                $artifacts = gh run view $workflow.id --json=artifacts | ConvertFrom-Json
+                $hasIsoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" }
+                if ($hasIsoArtifact) {
+                  $workflowsWithArtifacts += $workflow
+                }
+              }
+              
+              if ($workflowsWithArtifacts.Count -eq 0) {
+                throw "No workflows with Windows artifacts found"
+              }
+              
+              $latestRun = $workflowsWithArtifacts[0]
+            } else {
+              $latestRun = $workflows[0]
+            }
+            
+            Write-Host "Found latest run: $($latestRun.id) ($($latestRun.workflowName))" -ForegroundColor Green
+            
+            # Get artifacts from latest run
+            $artifacts = gh run view $latestRun.id --json=artifacts | ConvertFrom-Json
+            $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" } | Select-Object -First 1
+            
+            if (-not $isoArtifact) {
+              throw "No Windows artifact found in run $($latestRun.id)"
+            }
+            
+            echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
+            echo "RUN_ID=$($latestRun.id)" >> $env:GITHUB_OUTPUT
+            echo "ARTIFACT_NAME=$($isoArtifact.name)" >> $env:GITHUB_OUTPUT
+            $currentArtifactName = $isoArtifact.name
+            
+          } catch {
+            throw "Failed to find latest workflow: $_"
           }
           
-          $latestRun = $workflows[0]
-          Write-Host "Found latest run: $($latestRun.id)" -ForegroundColor Green
+        } elseif ($sourceInput -match "^(\d+):(.+)$") {
+          # Format: run_id:artifact_name
+          $runId = $matches[1]
+          $artifactName = $matches[2]
           
-          # Get artifacts from latest run
-          $artifacts = gh run view $latestRun.id --json=artifacts | ConvertFrom-Json
-          $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows-\d+" } | Select-Object -First 1
+          Write-Host "Using specified run ID: $runId, artifact: $artifactName" -ForegroundColor Green
+          echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
+          echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
+          echo "ARTIFACT_NAME=$artifactName" >> $env:GITHUB_OUTPUT
+          $currentArtifactName = $artifactName
+          
+        } elseif ($sourceInput -match "^https?://") {
+          # Direct URL
+          Write-Host "Using direct URL: $sourceInput" -ForegroundColor Green
+          echo "DOWNLOAD_METHOD=direct_url" >> $env:GITHUB_OUTPUT
+          echo "ARTIFACT_URL=$sourceInput" >> $env:GITHUB_OUTPUT
+          
+          # Extract artifact name from URL for version detection
+          try {
+            $uri = [System.Uri]::new($sourceInput)
+            $urlName = [System.IO.Path]::GetFileNameWithoutExtension($uri.Segments[-1])
+            if (-not $urlName) { $urlName = "windows-iso" }
+            $currentArtifactName = $urlName
+            echo "ARTIFACT_NAME=$urlName" >> $env:GITHUB_OUTPUT
+          } catch {
+            $currentArtifactName = "windows-iso"
+            echo "ARTIFACT_NAME=windows-iso" >> $env:GITHUB_OUTPUT
+          }
+          
+        } elseif ($sourceInput -match "github\.com.*?/actions/runs/(\d+)") {
+          # GitHub Actions run URL
+          $runId = $matches[1]
+          Write-Host "Extracted run ID from GitHub URL: $runId" -ForegroundColor Green
+          
+          # Get artifacts from the run
+          $artifacts = gh run view $runId --json=artifacts | ConvertFrom-Json
+          $isoArtifact = $artifacts.artifacts | Where-Object { $_.name -match "windows" } | Select-Object -First 1
           
           if (-not $isoArtifact) {
-            throw "No Windows ISO artifact found in latest run"
+            throw "No Windows artifact found in run $runId"
           }
           
           echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
-          echo "RUN_ID=$($latestRun.id)" >> $env:GITHUB_OUTPUT
+          echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
           echo "ARTIFACT_NAME=$($isoArtifact.name)" >> $env:GITHUB_OUTPUT
           $currentArtifactName = $isoArtifact.name
           
-        } elseif ($artifactSource -eq "run_id:artifact_name") {
-          # Format: run_id:artifact_name from artifact_details
-          if (-not $artifactDetails) {
-            throw "Artifact details required for run_id:artifact_name format"
-          }
-          
-          if ($artifactDetails -match "^(\d+):(.+)$") {
-            $runId = $matches[1]
-            $artifactName = $matches[2]
-            
-            Write-Host "Using specified run ID: $runId, artifact: $artifactName" -ForegroundColor Green
-            echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
-            echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
-            echo "ARTIFACT_NAME=$artifactName" >> $env:GITHUB_OUTPUT
-            $currentArtifactName = $artifactName
-          } else {
-            throw "Invalid format in artifact_details. Use 'run_id:artifact_name'"
-          }
-          
-        } elseif ($artifactSource -eq "manual_link") {
-          # Direct artifact URL from artifact_details
-          if (-not $artifactDetails) {
-            throw "Artifact URL required for manual_link"
-          }
-          
-          if ($artifactDetails -match "^https?://") {
-            Write-Host "Using manual artifact URL: $artifactDetails" -ForegroundColor Green
-            echo "DOWNLOAD_METHOD=direct_url" >> $env:GITHUB_OUTPUT
-            echo "ARTIFACT_URL=$artifactDetails" >> $env:GITHUB_OUTPUT
-            
-            # Extract artifact name from URL for version detection
-            $urlName = [System.IO.Path]::GetFileNameWithoutExtension([System.Uri]::new($artifactDetails).Segments[-1])
-            $currentArtifactName = $urlName
-            echo "ARTIFACT_NAME=$urlName" >> $env:GITHUB_OUTPUT
-          } else {
-            throw "Invalid URL format in artifact_details. Must start with http:// or https://"
-          }
-          
         } else {
-          throw "Invalid artifact source. Choose: latest, run_id:artifact_name, or manual_link"
+          throw "Invalid input format. Use: 'latest', 'run_id:artifact_name', 'direct_url', or GitHub Actions run URL"
         }
         
         # Auto-detect Windows version from artifact name
@@ -166,6 +177,7 @@ jobs:
           echo "DETECTED_BUILD=$detectedBuild" >> $env:GITHUB_OUTPUT
         } else {
           Write-Host "Could not auto-detect Windows build from artifact name" -ForegroundColor Yellow
+          echo "DETECTED_BUILD=22631" >> $env:GITHUB_OUTPUT  # Default fallback
         }
       env:
         GH_TOKEN: ${{ github.token }}
@@ -291,25 +303,24 @@ jobs:
       shell: powershell
       run: |
         $detectedBuild = "${{ steps.parse-source.outputs.DETECTED_BUILD }}"
-        $targetBuild = "$env:TARGET_BUILD"
-        $finalBuild = if ($targetBuild) { $targetBuild } else { $detectedBuild }
         
         $buildInfo = @{
           BuildDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
-          TargetBuild = $finalBuild
-          DetectedBuild = $detectedBuild
+          WindowsBuild = $detectedBuild
           ProIndex = "$env:PRO_INDEX"
+          SourceInput = "$env:SOURCE_INPUT"
           SourceRunId = "${{ steps.parse-source.outputs.RUN_ID }}"
           SourceArtifact = "${{ steps.parse-source.outputs.ARTIFACT_NAME }}"
+          DownloadMethod = "${{ steps.parse-source.outputs.DOWNLOAD_METHOD }}"
           WorkflowRun = "${{ github.run_number }}"
           CommitSha = "${{ github.sha }}"
         }
         
         $buildInfo | ConvertTo-Json | Set-Content "output/build-info.json" -Encoding UTF8
-        Write-Host "Build info created for build: $finalBuild" -ForegroundColor Green
+        Write-Host "Build info created for Windows build: $detectedBuild" -ForegroundColor Green
         
         # Set for next steps
-        echo "FINAL_BUILD=$finalBuild" >> $env:GITHUB_OUTPUT
+        echo "FINAL_BUILD=$detectedBuild" >> $env:GITHUB_OUTPUT
       id: build-info
     
     - name: Upload WIM Artifact
