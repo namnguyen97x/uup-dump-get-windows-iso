@@ -66,23 +66,39 @@ jobs:
           Write-Host "Finding latest build workflow..." -ForegroundColor Cyan
           
           try {
+            Write-Host "Searching for build.yml workflows..." -ForegroundColor Cyan
             $workflows = gh run list --workflow="build.yml" --status="success" --limit=10 --json=id,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
             
             if ($workflows.Count -eq 0) {
               Write-Host "No successful 'build.yml' workflows found. Trying other workflows..." -ForegroundColor Yellow
               
-              # Try to find any successful workflow with artifacts
+              # Try to find any successful workflow with artifacts  
+              Write-Host "Searching for any successful workflows with artifacts..." -ForegroundColor Cyan
               $allWorkflows = gh run list --status="success" --limit=20 --json=id,workflowName,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
+              Write-Host "Found $($allWorkflows.Count) successful workflows to check..." -ForegroundColor Cyan
               $workflowsWithArtifacts = @()
               
               foreach ($workflow in $allWorkflows) {
-                $artifacts = gh run view $workflow.id --json=artifacts | ConvertFrom-Json
-                $hasIsoArtifact = $artifacts.artifacts | Where-Object { 
-                  $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" -or
-                  ($_.sizeInBytes -and $_.sizeInBytes -gt 1GB)
-                }
-                if ($hasIsoArtifact) {
-                  $workflowsWithArtifacts += $workflow
+                Write-Host "Checking workflow run $($workflow.id) ($($workflow.workflowName))..." -ForegroundColor Gray
+                try {
+                  $artifacts = gh run view $workflow.id --json=artifacts | ConvertFrom-Json
+                  if ($artifacts.artifacts -and $artifacts.artifacts.Count -gt 0) {
+                    Write-Host "  Found $($artifacts.artifacts.Count) artifacts" -ForegroundColor Gray
+                    $hasIsoArtifact = $artifacts.artifacts | Where-Object { 
+                      $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" -or
+                      ($_.sizeInBytes -and $_.sizeInBytes -gt 1GB)
+                    }
+                    if ($hasIsoArtifact) {
+                      Write-Host "  ✅ Has suitable artifacts!" -ForegroundColor Green
+                      $workflowsWithArtifacts += $workflow
+                    } else {
+                      Write-Host "  ❌ No suitable artifacts" -ForegroundColor Gray
+                    }
+                  } else {
+                    Write-Host "  No artifacts" -ForegroundColor Gray
+                  }
+                } catch {
+                  Write-Host "  Error: $_" -ForegroundColor Red
                 }
               }
               
@@ -156,7 +172,23 @@ jobs:
           try {
             # Get artifacts from the run
             Write-Host "Fetching artifacts from run $runId..." -ForegroundColor Cyan
-            $artifacts = gh run view $runId --json=artifacts | ConvertFrom-Json
+            
+            # First try without explicit repo
+            try {
+              $artifacts = gh run view $runId --json=artifacts | ConvertFrom-Json
+              Write-Host "✅ Successfully fetched run info from current context" -ForegroundColor Green
+            } catch {
+              Write-Host "❌ Failed with current context, trying with explicit repo..." -ForegroundColor Yellow
+              Write-Host "Error: $_" -ForegroundColor Red
+              
+              # Extract repo info from current context
+              $currentRepoOwner = "${{ github.repository_owner }}"
+              $currentRepoName = "${{ github.event.repository.name }}"
+              
+              Write-Host "Trying with explicit repo: $currentRepoOwner/$currentRepoName" -ForegroundColor Cyan
+              $artifacts = gh run view $runId --repo "$currentRepoOwner/$currentRepoName" --json=artifacts | ConvertFrom-Json
+              Write-Host "✅ Successfully fetched with explicit repo" -ForegroundColor Green
+            }
             
             Write-Host "Available artifacts in run $runId`:" -ForegroundColor Cyan
             if ($artifacts.artifacts -and $artifacts.artifacts.Count -gt 0) {
@@ -179,21 +211,37 @@ jobs:
               
               if ($repoOwner -and $repoName) {
                 Write-Host "Searching in repo: $repoOwner/$repoName" -ForegroundColor Cyan
-                $alternativeRuns = gh run list --repo "$repoOwner/$repoName" --status="success" --limit=5 --json=id,workflowName,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
+                $alternativeRuns = gh run list --repo "$repoOwner/$repoName" --status="success" --limit=10 --json=id,workflowName,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
+                
+                Write-Host "Found $($alternativeRuns.Count) successful runs to check..." -ForegroundColor Cyan
                 
                 foreach ($altRun in $alternativeRuns) {
-                  $altArtifacts = gh run view $altRun.id --repo "$repoOwner/$repoName" --json=artifacts | ConvertFrom-Json
-                  if ($altArtifacts.artifacts -and $altArtifacts.artifacts.Count -gt 0) {
-                    $hasWindowsArtifact = $altArtifacts.artifacts | Where-Object { 
-                      $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" -or
-                      ($_.sizeInBytes -and $_.sizeInBytes -gt 1GB)
+                  Write-Host "Checking run $($altRun.id) ($($altRun.workflowName))..." -ForegroundColor Gray
+                  try {
+                    $altArtifacts = gh run view $altRun.id --repo "$repoOwner/$repoName" --json=artifacts | ConvertFrom-Json
+                    if ($altArtifacts.artifacts -and $altArtifacts.artifacts.Count -gt 0) {
+                      Write-Host "  Found $($altArtifacts.artifacts.Count) artifacts" -ForegroundColor Gray
+                      
+                      foreach ($artifact in $altArtifacts.artifacts) {
+                        $sizeMB = if ($artifact.sizeInBytes) { ($artifact.sizeInBytes / 1MB).ToString('F1') } else { "Unknown" }
+                        Write-Host "    - $($artifact.name) ($sizeMB MB)" -ForegroundColor Gray
+                      }
+                      
+                      $hasWindowsArtifact = $altArtifacts.artifacts | Where-Object { 
+                        $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" -or
+                        ($_.sizeInBytes -and $_.sizeInBytes -gt 1GB)
+                      }
+                      if ($hasWindowsArtifact) {
+                        Write-Host "✅ Found alternative run with suitable artifacts: $($altRun.id)" -ForegroundColor Green
+                        $runId = $altRun.id
+                        $artifacts = $altArtifacts
+                        break
+                      }
+                    } else {
+                      Write-Host "  No artifacts in this run" -ForegroundColor Gray
                     }
-                    if ($hasWindowsArtifact) {
-                      Write-Host "✅ Found alternative run with artifacts: $($altRun.id)" -ForegroundColor Green
-                      $runId = $altRun.id
-                      $artifacts = $altArtifacts
-                      break
-                    }
+                  } catch {
+                    Write-Host "  Error checking run $($altRun.id): $_" -ForegroundColor Red
                   }
                 }
                 
@@ -301,13 +349,33 @@ jobs:
         $downloadMethod = "${{ steps.parse-source.outputs.DOWNLOAD_METHOD }}"
         $artifactName = "${{ steps.parse-source.outputs.ARTIFACT_NAME }}"
         
+        Write-Host "Repository: ${{ github.repository }}" -ForegroundColor Cyan
+        Write-Host "Download Method: $downloadMethod" -ForegroundColor Cyan
+        Write-Host "Artifact Name: $artifactName" -ForegroundColor Cyan
+        
         try {
           if ($downloadMethod -eq "gh_cli") {
             # Download using GitHub CLI
             $runId = "${{ steps.parse-source.outputs.RUN_ID }}"
             
             Write-Host "Downloading artifact '$artifactName' from run $runId using GitHub CLI..." -ForegroundColor Green
-            gh run download $runId --name "$artifactName" --dir "artifacts"
+            
+            # Try with current repo context first
+            try {
+              gh run download $runId --name "$artifactName" --dir "artifacts"
+              Write-Host "✅ Downloaded successfully from current repo context" -ForegroundColor Green
+            } catch {
+              Write-Host "❌ Failed with current context, trying with explicit repo..." -ForegroundColor Yellow
+              Write-Host "Error: $_" -ForegroundColor Red
+              
+              # Try with explicit repo parameter
+              $repoOwner = "${{ github.repository_owner }}"
+              $repoName = "${{ github.event.repository.name }}"
+              
+              Write-Host "Trying with repo: $repoOwner/$repoName" -ForegroundColor Cyan
+              gh run download $runId --repo "$repoOwner/$repoName" --name "$artifactName" --dir "artifacts"
+              Write-Host "✅ Downloaded successfully with explicit repo" -ForegroundColor Green
+            }
             
           } elseif ($downloadMethod -eq "direct_url") {
             # Download using direct URL
