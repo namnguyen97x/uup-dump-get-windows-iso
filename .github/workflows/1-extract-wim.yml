@@ -79,7 +79,7 @@ jobs:
                 $artifacts = gh run view $workflow.id --json=artifacts | ConvertFrom-Json
                 $hasIsoArtifact = $artifacts.artifacts | Where-Object { 
                   $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" -or
-                  $_.sizeInBytes -gt 1GB
+                  ($_.sizeInBytes -and $_.sizeInBytes -gt 1GB)
                 }
                 if ($hasIsoArtifact) {
                   $workflowsWithArtifacts += $workflow
@@ -101,12 +101,17 @@ jobs:
             $artifacts = gh run view $latestRun.id --json=artifacts | ConvertFrom-Json
             
             Write-Host "Available artifacts in latest run $($latestRun.id):" -ForegroundColor Cyan
-            if ($artifacts.artifacts.Count -gt 0) {
+            if ($artifacts.artifacts -and $artifacts.artifacts.Count -gt 0) {
               foreach ($artifact in $artifacts.artifacts) {
-                Write-Host "  - $($artifact.name) ($(($artifact.sizeInBytes / 1MB).ToString('F1')) MB)" -ForegroundColor White
+                $sizeMB = if ($artifact.sizeInBytes) { ($artifact.sizeInBytes / 1MB).ToString('F1') } else { "Unknown" }
+                Write-Host "  - $($artifact.name) ($sizeMB MB)" -ForegroundColor White
               }
             } else {
-              Write-Host "  No artifacts found" -ForegroundColor Yellow
+              Write-Host "  ❌ No artifacts found in latest run" -ForegroundColor Red
+              Write-Host "  💡 Trying to find other successful runs with artifacts..." -ForegroundColor Yellow
+              
+              # Already searched in workflowsWithArtifacts, so if we're here, there are no suitable runs
+              throw "No artifacts found in any recent successful workflow runs"
             }
             
             # Try to find Windows/ISO related artifact with expanded patterns  
@@ -116,23 +121,23 @@ jobs:
             
             # If no Windows-specific artifact found, try any artifact that could contain an ISO
             if (-not $isoArtifact) {
-              Write-Host "No Windows-specific artifact found, checking all artifacts..." -ForegroundColor Yellow
+              Write-Host "No Windows-specific artifact found, checking large files..." -ForegroundColor Yellow
               $isoArtifact = $artifacts.artifacts | Where-Object { 
-                $_.sizeInBytes -gt 1GB  # Assume ISO files are larger than 1GB
+                $_.sizeInBytes -and $_.sizeInBytes -gt 1GB  # Assume ISO files are larger than 1GB
               } | Select-Object -First 1
             }
             
             # Last resort: take the largest artifact
             if (-not $isoArtifact -and $artifacts.artifacts.Count -gt 0) {
               Write-Host "Taking largest artifact as fallback..." -ForegroundColor Yellow
-              $isoArtifact = $artifacts.artifacts | Sort-Object sizeInBytes -Descending | Select-Object -First 1
+              $isoArtifact = $artifacts.artifacts | Where-Object { $_.sizeInBytes } | Sort-Object sizeInBytes -Descending | Select-Object -First 1
             }
             
             if (-not $isoArtifact) {
-              throw "No suitable artifacts found in run $($latestRun.id)"
+              throw "No suitable artifacts found. Available artifacts don't match Windows/ISO patterns and aren't large enough."
             }
             
-            Write-Host "Selected artifact: $($isoArtifact.name)" -ForegroundColor Green
+            Write-Host "✅ Selected artifact: $($isoArtifact.name)" -ForegroundColor Green
             
             echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
             echo "RUN_ID=$($latestRun.id)" >> $env:GITHUB_OUTPUT
@@ -150,15 +155,54 @@ jobs:
           
           try {
             # Get artifacts from the run
+            Write-Host "Fetching artifacts from run $runId..." -ForegroundColor Cyan
             $artifacts = gh run view $runId --json=artifacts | ConvertFrom-Json
             
             Write-Host "Available artifacts in run $runId`:" -ForegroundColor Cyan
-            if ($artifacts.artifacts.Count -gt 0) {
+            if ($artifacts.artifacts -and $artifacts.artifacts.Count -gt 0) {
               foreach ($artifact in $artifacts.artifacts) {
-                Write-Host "  - $($artifact.name) ($(($artifact.sizeInBytes / 1MB).ToString('F1')) MB)" -ForegroundColor White
+                $sizeMB = if ($artifact.sizeInBytes) { ($artifact.sizeInBytes / 1MB).ToString('F1') } else { "Unknown" }
+                Write-Host "  - $($artifact.name) ($sizeMB MB)" -ForegroundColor White
               }
             } else {
-              Write-Host "  No artifacts found" -ForegroundColor Yellow
+              Write-Host "  ❌ No artifacts found in this run" -ForegroundColor Red
+              Write-Host "  💡 This could mean:" -ForegroundColor Yellow
+              Write-Host "     - The run hasn't completed yet" -ForegroundColor Yellow
+              Write-Host "     - The run failed before creating artifacts" -ForegroundColor Yellow
+              Write-Host "     - The artifacts have expired (7-90 days retention)" -ForegroundColor Yellow
+              Write-Host "     - You don't have permission to access these artifacts" -ForegroundColor Yellow
+              
+              # Try to get a different run from the same repo
+              Write-Host "🔄 Trying to find alternative runs with artifacts..." -ForegroundColor Cyan
+              $repoOwner = if ($sourceInput -match "github\.com/([^/]+)/([^/]+)") { $matches[1] } else { "" }
+              $repoName = if ($sourceInput -match "github\.com/([^/]+)/([^/]+)") { $matches[2] } else { "" }
+              
+              if ($repoOwner -and $repoName) {
+                Write-Host "Searching in repo: $repoOwner/$repoName" -ForegroundColor Cyan
+                $alternativeRuns = gh run list --repo "$repoOwner/$repoName" --status="success" --limit=5 --json=id,workflowName,conclusion,status,displayTitle,createdAt | ConvertFrom-Json
+                
+                foreach ($altRun in $alternativeRuns) {
+                  $altArtifacts = gh run view $altRun.id --repo "$repoOwner/$repoName" --json=artifacts | ConvertFrom-Json
+                  if ($altArtifacts.artifacts -and $altArtifacts.artifacts.Count -gt 0) {
+                    $hasWindowsArtifact = $altArtifacts.artifacts | Where-Object { 
+                      $_.name -match "windows|iso|win|23h2|24h2|22h2|21h2|22631|26100|22621|22000" -or
+                      ($_.sizeInBytes -and $_.sizeInBytes -gt 1GB)
+                    }
+                    if ($hasWindowsArtifact) {
+                      Write-Host "✅ Found alternative run with artifacts: $($altRun.id)" -ForegroundColor Green
+                      $runId = $altRun.id
+                      $artifacts = $altArtifacts
+                      break
+                    }
+                  }
+                }
+                
+                if (-not $artifacts.artifacts -or $artifacts.artifacts.Count -eq 0) {
+                  throw "No runs with suitable artifacts found in repository $repoOwner/$repoName"
+                }
+              } else {
+                throw "Cannot extract repository info from URL and no artifacts in specified run"
+              }
             }
             
             # Try to find Windows/ISO related artifact with expanded patterns
@@ -168,23 +212,23 @@ jobs:
             
             # If no Windows-specific artifact found, try any artifact that could contain an ISO
             if (-not $isoArtifact) {
-              Write-Host "No Windows-specific artifact found, checking all artifacts..." -ForegroundColor Yellow
+              Write-Host "No Windows-specific artifact found, checking large files..." -ForegroundColor Yellow
               $isoArtifact = $artifacts.artifacts | Where-Object { 
-                $_.sizeInBytes -gt 1GB  # Assume ISO files are larger than 1GB
+                $_.sizeInBytes -and $_.sizeInBytes -gt 1GB  # Assume ISO files are larger than 1GB
               } | Select-Object -First 1
             }
             
             # Last resort: take the largest artifact
             if (-not $isoArtifact -and $artifacts.artifacts.Count -gt 0) {
               Write-Host "Taking largest artifact as fallback..." -ForegroundColor Yellow
-              $isoArtifact = $artifacts.artifacts | Sort-Object sizeInBytes -Descending | Select-Object -First 1
+              $isoArtifact = $artifacts.artifacts | Where-Object { $_.sizeInBytes } | Sort-Object sizeInBytes -Descending | Select-Object -First 1
             }
             
             if (-not $isoArtifact) {
-              throw "No suitable artifacts found in run $runId"
+              throw "No suitable artifacts found. Available artifacts don't match Windows/ISO patterns and aren't large enough."
             }
             
-            Write-Host "Selected artifact: $($isoArtifact.name)" -ForegroundColor Green
+            Write-Host "✅ Selected artifact: $($isoArtifact.name)" -ForegroundColor Green
             
             echo "DOWNLOAD_METHOD=gh_cli" >> $env:GITHUB_OUTPUT
             echo "RUN_ID=$runId" >> $env:GITHUB_OUTPUT
@@ -192,6 +236,7 @@ jobs:
             $currentArtifactName = $isoArtifact.name
             
           } catch {
+            Write-Host "❌ Error details: $_" -ForegroundColor Red
             throw "Failed to get artifacts from run $runId`: $_"
           }
           
