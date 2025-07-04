@@ -22,7 +22,7 @@ jobs:
       - name: Set matrix
         id: set-matrix
         run: |
-          echo "matrix=$env:TARGETS" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          echo "matrix={\"name\":$env:TARGETS}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           TARGETS: ${{ steps.get-targets.outputs.targets }}
 
