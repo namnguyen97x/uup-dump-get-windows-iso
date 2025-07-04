@@ -18,7 +18,7 @@ $TARGETS = @{
     # see https://en.wikipedia.org/wiki/Windows_11
     # see https://en.wikipedia.org/wiki/Windows_11_version_history
     "windows-11-25h2" = @{
-        search = "window 11 26200 amd64" # aka 23H2. Enterprise EOL: November 10, 2026.
+        search = "window 11 26200 amd64 preview" # aka 25H2 preview. Enterprise EOL: November 10, 2026.
         edition = "Professional"
         virtualEdition = $null #Enterprise
     }
