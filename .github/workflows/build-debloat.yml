@@ -1,0 +1,66 @@
+name: build-debloat
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 18 * *' # every month, the 18th day.
+
+jobs:
+  get-matrix:
+    runs-on: windows-2022
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get targets from PowerShell (Debloat)
+        id: get-targets
+        shell: pwsh
+        working-directory: ./debloat-test
+        run: |
+          $targets = & ./list-targets-debloat.ps1 | Out-String
+          $targets = $targets -replace '[\r\n]+',''
+          echo "targets=$targets" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Set matrix
+        id: set-matrix
+        shell: pwsh
+        run: |
+          $matrix = @{ name = @(${env:TARGETS} | ConvertFrom-Json) } | ConvertTo-Json -Compress
+          echo "matrix=$matrix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        env:
+          TARGETS: ${{ steps.get-targets.outputs.targets }}
+
+  build:
+    needs: get-matrix
+    runs-on: windows-2022
+    strategy:
+      matrix: ${{ fromJson(needs.get-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show available disk space before build
+        run: Get-PSDrive -PSProvider FileSystem
+      - name: Build Debloated Windows
+        working-directory: ./debloat-test
+        run: pwsh ./uup-dump-debloat.ps1 ${{ matrix.name }} c:/output
+      - name: Show available disk space after build
+        run: Get-PSDrive -PSProvider FileSystem
+      - name: Build summary (Debloated)
+        run: |
+          $iso = Get-Content (Resolve-Path c:/output/*.json) | ConvertFrom-Json
+          Add-Content $env:GITHUB_STEP_SUMMARY @"
+          | Property | Value |
+          | :--- | :--- |
+          | Name | $($iso.name) |
+          | Build | $($iso.build) |
+          | Debloated | $($iso.debloated) |
+          | Custom Apps Count | $($iso.customApps.Count) |
+          | Checksum | $($iso.checksum) |
+          $($iso.images | ForEach-Object {"| Image Name #$($_.index) | $($_.name) |"})
+          | UUP dump | [$($iso.title)]($($iso.uupDump.downloadUrl)) |
+          "@
+      - name: Upload artifact (Debloated)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-debloated
+          path: |
+            c:/output/*.json
+            c:/output/*.iso
+            c:/output/*.iso.sha256.txt 
