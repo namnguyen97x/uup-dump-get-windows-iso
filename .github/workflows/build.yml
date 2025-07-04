@@ -16,7 +16,8 @@ jobs:
         id: get-targets
         shell: pwsh
         run: |
-          $targets = & ./list-targets.ps1
+          $targets = & ./list-targets.ps1 | Out-String
+          $targets = $targets -replace '[\r\n]+',''
           echo "targets=$targets" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
       - name: Set matrix
         id: set-matrix
