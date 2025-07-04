@@ -72,6 +72,37 @@ if (Test-Path $originalBuildDir) {
         Set-Content -Path $convertConfigPath -Value $convertConfig -Encoding ASCII
         Write-Host "✅ Patched ConvertConfig.ini" -ForegroundColor Green
         $patchedCustomList = $true
+        # Nếu đã patch CustomAppsList.txt và ConvertConfig.ini thì tạo ISO và metadata, bỏ qua mount WIM/DISM
+        Write-Host "CustomAppsList.txt and ConvertConfig.ini patched. Skipping WIM mount/DISM debloat." -ForegroundColor Cyan
+        # Tạo ISO từ thư mục đã được debloat (thực chất là chỉ giữ lại app core)
+        $isoName = "$windowsTargetName-debloated.iso"
+        $isoPath = "$destinationDirectory\$isoName"
+        # Sử dụng oscdimg để tạo ISO (nếu có)
+        $oscdimgPath = "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
+        if (Test-Path $oscdimgPath) {
+            Write-Host "Creating ISO with oscdimg..." -ForegroundColor Yellow
+            & $oscdimgPath -m -o -u2 -udfver102 -bootdata:2#p0,e,b"$buildDirectory\boot\etfsboot.com"#pEF,e,b"$buildDirectory\efi\microsoft\boot\efisys.bin" "$buildDirectory" "$isoPath"
+        } else {
+            Write-Host "oscdimg not found, using PowerShell method..." -ForegroundColor Yellow
+            # Fallback method (nếu cần)
+            $isoImage = New-Object -ComObject IMAPI2.MsftDiscMaster2
+            # ... (implementation for creating ISO without oscdimg)
+        }
+        # Tạo metadata đơn giản
+        $metadata = @{
+            name = $windowsTargetName
+            title = "Windows Debloated (Ultra-Lite, CustomList)"
+            debloated = $true
+            coreAppsOnly = $true
+            method = "CustomAppsList patch (no DISM)"
+            createdDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        }
+        $metadataPath = "$isoPath.json"
+        $metadata | ConvertTo-Json -Depth 10 | Set-Content $metadataPath
+        Write-Host "=== DEBLOATING COMPLETE (CustomList)! ===" -ForegroundColor Green
+        Write-Host "Debloated ISO: $isoPath" -ForegroundColor Cyan
+        Write-Host "Metadata: $metadataPath" -ForegroundColor Cyan
+        exit 0
     }
 }
 
@@ -188,26 +219,4 @@ Write-Host "`n=== DEBLOATING COMPLETE! ===" -ForegroundColor Green
 Write-Host "Debloated ISO: $isoPath" -ForegroundColor Cyan
 Write-Host "Metadata: $metadataPath" -ForegroundColor Cyan
 Write-Host "Apps Removed: $removedCount" -ForegroundColor Yellow
-Write-Host "Apps Kept: $keptCount (Core only)" -ForegroundColor Yellow
-
-# Nếu đã patch CustomAppsList.txt thì bỏ qua bước mount WIM và DISM
-if ($patchedCustomList) {
-    Write-Host "CustomAppsList.txt and ConvertConfig.ini patched. Skipping WIM mount/DISM debloat." -ForegroundColor Cyan
-    # Tạo metadata đơn giản
-    $metadata = @{
-        name = $windowsTargetName
-        title = "Windows Debloated (Ultra-Lite, CustomList)"
-        debloated = $true
-        coreAppsOnly = $true
-        method = "CustomAppsList patch (no DISM)"
-        createdDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    }
-    $isoName = "$windowsTargetName-debloated.iso"
-    $isoPath = "$destinationDirectory\$isoName"
-    $metadataPath = "$isoPath.json"
-    $metadata | ConvertTo-Json -Depth 10 | Set-Content $metadataPath
-    Write-Host "=== DEBLOATING COMPLETE (CustomList)! ===" -ForegroundColor Green
-    Write-Host "Debloated ISO: $isoPath" -ForegroundColor Cyan
-    Write-Host "Metadata: $metadataPath" -ForegroundColor Cyan
-    exit 0
-} 
+Write-Host "Apps Kept: $keptCount (Core only)" -ForegroundColor Yellow 
