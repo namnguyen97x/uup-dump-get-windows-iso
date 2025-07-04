@@ -4,20 +4,33 @@ on:
   schedule:
     #- cron: '0 * * * *' # hourly.
     - cron: '0 0 17 * *' # every month, the 17th day.
+
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - name: windows-11
-          - name: windows-2022
+  get-matrix:
     runs-on: windows-2022
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      # log the available disk space, so we can inspect it later.
-      # NB GitHub-hosted runners have limited available disk space.
-      #    see https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#supported-runners-and-hardware-resources
+      - uses: actions/checkout@v4
+      - name: Get targets from PowerShell
+        id: get-targets
+        shell: pwsh
+        run: |
+          $targets = & ./list-targets.ps1
+          echo "targets=$targets" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          $matrix = '{"name":' + "${{ steps.get-targets.outputs.targets }}" + '}'
+          echo "matrix=$matrix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+  build:
+    needs: get-matrix
+    runs-on: windows-2022
+    strategy:
+      matrix: ${{ fromJson(needs.get-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
       - name: Show available disk space before build
         run: Get-PSDrive -PSProvider FileSystem
       # NB we are writting outside of the current working/job directory
