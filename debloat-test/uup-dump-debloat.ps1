@@ -28,9 +28,163 @@ $TARGETS = @{
 }
 
 # Import functions from original script
-. "$PSScriptRoot/../uup-dump-get-windows-iso.ps1" -WindowsTargetName "dummy" -DestinationDirectory "dummy" 2>$null
-# Reset error action after importing
-$ErrorActionPreference = 'Stop'
+function New-QueryString([hashtable]$parameters) {
+    @($parameters.GetEnumerator() | ForEach-Object {
+        "$($_.Key)=$([System.Web.HttpUtility]::UrlEncode($_.Value))"
+    }) -join '&'
+}
+
+function Invoke-UupDumpApi([string]$name, [hashtable]$body) {
+    # see https://git.uupdump.net/uup-dump/json-api
+    for ($n = 0; $n -lt 15; ++$n) {
+        if ($n) {
+            Write-Host "Waiting a bit before retrying the uup-dump api ${name} request #$n"
+            Start-Sleep -Seconds 10
+            Write-Host "Retrying the uup-dump api ${name} request #$n"
+        }
+        try {
+            return Invoke-RestMethod `
+                -Method Get `
+                -Uri "https://api.uupdump.net/$name.php" `
+                -Body $body
+        } catch {
+            Write-Host "WARN: failed the uup-dump api $name request: $_"
+        }
+    }
+    throw "timeout making the uup-dump api $name request"
+}
+
+function Get-UupDumpIso($name, $target) {
+    Write-Host "Getting the $name metadata"
+    $result = Invoke-UupDumpApi listid @{
+        search = $target.search
+    }
+    $result.response.builds.PSObject.Properties `
+        | ForEach-Object {
+            $id = $_.Value.uuid
+            $uupDumpUrl = 'https://uupdump.net/selectlang.php?' + (New-QueryString @{
+                id = $id
+            })
+            Write-Host "Processing $name $id ($uupDumpUrl)"
+            $_
+        } `
+        | Where-Object {
+            # ignore previews when they are not explicitly requested.
+            $result = $target.search -like '*preview*' -or $_.Value.title -notlike '*preview*'
+            if (!$result) {
+                Write-Host "Skipping. Expected preview=false. Got preview=true."
+            }
+            $result
+        } `
+        | ForEach-Object {
+            $id = $_.Value.uuid
+            Write-Host "Getting the $name $id langs metadata"
+            $result = Invoke-UupDumpApi listlangs @{
+                id = $id
+            }
+            if ($result.response.updateInfo.build -ne $_.Value.build) {
+                throw 'for some reason listlangs returned an unexpected build'
+            }
+            $_.Value | Add-Member -NotePropertyMembers @{
+                langs = $result.response.langFancyNames
+                info = $result.response.updateInfo
+            }
+            $langs = $_.Value.langs.PSObject.Properties.Name
+            $editions = if ($langs -contains 'en-us') {
+                Write-Host "Getting the $name $id editions metadata"
+                $result = Invoke-UupDumpApi listeditions @{
+                    id = $id
+                    lang = 'en-us'
+                }
+                $result.response.editionFancyNames
+            } else {
+                Write-Host "Skipping. Expected langs=en-us. Got langs=$($langs -join ',')."
+                [PSCustomObject]@{}
+            }
+            $_.Value | Add-Member -NotePropertyMembers @{
+                editions = $editions
+            }
+            $_
+        } `
+        | Where-Object {
+            # only return builds that match criteria
+            $ring = $_.Value.info.ring
+            $langs = $_.Value.langs.PSObject.Properties.Name
+            $editions = $_.Value.editions.PSObject.Properties.Name
+            $result = $true
+            $expectedRing = if ($target.PSObject.Properties.Name -contains 'ring') {
+                $target.ring
+            } else {
+                'RETAIL'
+            }
+            if ($ring -ne $expectedRing) {
+                Write-Host "Skipping. Expected ring=$expectedRing. Got ring=$ring."
+                $result = $false
+            }
+            if ($langs -notcontains 'en-us') {
+                Write-Host "Skipping. Expected langs=en-us. Got langs=$($langs -join ',')."
+                $result = $false
+            }
+            if ($editions -notcontains $target.edition) {
+                Write-Host "Skipping. Expected editions=$($target.edition). Got editions=$($editions -join ',')."
+                $result = $false
+            }
+            $result
+        } `
+        | Select-Object -First 1 `
+        | ForEach-Object {
+            $id = $_.Value.uuid
+            [PSCustomObject]@{
+                name = $name
+                title = $_.Value.title
+                build = $_.Value.build
+                id = $id
+                edition = $target.edition
+                virtualEdition = $target.virtualEdition
+                apiUrl = 'https://api.uupdump.net/get.php?' + (New-QueryString @{
+                    id = $id
+                    lang = 'en-us'
+                    edition = $target.edition
+                })
+                downloadUrl = 'https://uupdump.net/download.php?' + (New-QueryString @{
+                    id = $id
+                    pack = 'en-us'
+                    edition = $target.edition
+                })
+                downloadPackageUrl = 'https://uupdump.net/get.php?' + (New-QueryString @{
+                    id = $id
+                    pack = 'en-us'
+                    edition = $target.edition
+                })
+            }
+        }
+}
+
+function Get-IsoWindowsImages($isoPath) {
+    $isoPath = Resolve-Path $isoPath
+    Write-Host "Mounting $isoPath"
+    $isoImage = Mount-DiskImage $isoPath -PassThru
+    try {
+        $isoVolume = $isoImage | Get-Volume
+        $installPath = "$($isoVolume.DriveLetter):\sources\install.wim"
+        Write-Host "Getting Windows images from $installPath"
+        Get-WindowsImage -ImagePath $installPath `
+            | ForEach-Object {
+                $image = Get-WindowsImage `
+                    -ImagePath $installPath `
+                    -Index $_.ImageIndex
+                $imageVersion = $image.Version
+                [PSCustomObject]@{
+                    index = $image.ImageIndex
+                    name = $image.ImageName
+                    version = $imageVersion
+                }
+            }
+    } finally {
+        Write-Host "Dismounting $isoPath"
+        Dismount-DiskImage $isoPath | Out-Null
+    }
+}
 
 function New-DebloatedCustomAppsList {
     @'
