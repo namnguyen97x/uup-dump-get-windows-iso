@@ -22,14 +22,16 @@ jobs:
       - name: Set matrix
         id: set-matrix
         run: |
-          $matrix = '{"name":' + "${{ steps.get-targets.outputs.targets }}" + '}'
-          echo "matrix=$matrix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          echo "matrix=$env:TARGETS" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        env:
+          TARGETS: ${{ steps.get-targets.outputs.targets }}
 
   build:
     needs: get-matrix
     runs-on: windows-2022
     strategy:
-      matrix: ${{ fromJson(needs.get-matrix.outputs.matrix) }}
+      matrix:
+        name: ${{ fromJson(needs.get-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - name: Show available disk space before build
