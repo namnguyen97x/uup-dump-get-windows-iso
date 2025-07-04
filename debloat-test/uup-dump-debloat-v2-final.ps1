@@ -48,7 +48,7 @@ if (Test-Path $originalBuildDir) {
     $convertConfigPath = "$buildDirectory/ConvertConfig.ini"
     $customAppsListPath = "$buildDirectory/CustomAppsList.txt"
     $patchedCustomList = $false
-    if (Test-Path $convertConfigPath -and Test-Path $customAppsListPath) {
+    if ((Test-Path $convertConfigPath) -and (Test-Path $customAppsListPath)) {
         Write-Host "Patching CustomAppsList.txt to only keep 3 core apps..." -ForegroundColor Yellow
         $coreAppsContent = @(
             "Microsoft.WindowsCalculator",
