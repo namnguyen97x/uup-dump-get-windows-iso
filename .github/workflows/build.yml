@@ -21,8 +21,10 @@ jobs:
           echo "targets=$targets" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
       - name: Set matrix
         id: set-matrix
+        shell: pwsh
         run: |
-          echo "matrix={\"name\":$env:TARGETS}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $matrix = @{ name = @(${env:TARGETS} | ConvertFrom-Json) } | ConvertTo-Json -Compress
+          echo "matrix=$matrix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         env:
           TARGETS: ${{ steps.get-targets.outputs.targets }}
 
