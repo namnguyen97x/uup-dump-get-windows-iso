@@ -23,11 +23,6 @@ $TARGETS = @{
         virtualEdition = $null #Enterprise
     }
     # see https://en.wikipedia.org/wiki/Windows_Server_2022
-    "window-server-2025" = @{
-        search = "window server 2025" # 
-        edition = "ServerStandard"
-        virtualEdition = $null
-    }
 }
 
 function New-QueryString([hashtable]$parameters) {
