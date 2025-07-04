@@ -2,7 +2,7 @@
 # Trích xuất danh sách key từ $TARGETS trong uup-dump-debloat.ps1
 
 # Đọc toàn bộ nội dung file
-$lines = Get-Content ./uup-dump-debloat.ps1
+$lines = Get-Content ./uup-dump-debloat-v2-final.ps1
 # Tìm vị trí bắt đầu của $TARGETS = @{
 $start = ($lines | Select-String '^[ \t]*\$TARGETS\s*=\s*@\{' | Select-Object -First 1).LineNumber - 1
 
