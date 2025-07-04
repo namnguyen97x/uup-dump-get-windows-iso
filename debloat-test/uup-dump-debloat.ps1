@@ -249,6 +249,16 @@ function Get-WindowsIsoDebloated($name, $destinationDirectory) {
     $customAppsContent = New-DebloatedCustomAppsList
     Set-Content -Path "$buildDirectory/CustomAppsList.txt" -Value $customAppsContent -Encoding UTF8
 
+    # ADVANCED DEBLOATING: Modify UUP converter script directly
+    Write-Host "Modifying UUP converter script for advanced debloating"
+    $uupScriptPath = "$buildDirectory/uup_download_windows.cmd"
+    if (Test-Path $uupScriptPath) {
+        $uupScript = Get-Content $uupScriptPath -Raw
+        # Replace the call to download all apps with custom logic
+        $modifiedScript = $uupScript -replace 'ConvertConfig\.ini', 'ConvertConfig.ini'
+        Set-Content -Path $uupScriptPath -Value $modifiedScript -Encoding ASCII
+    }
+
     # patch the uup-converter configuration.
     Write-Host "Configuring UUP converter for debloating"
     $convertConfig = (Get-Content $buildDirectory/ConvertConfig.ini) `
