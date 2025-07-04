@@ -43,6 +43,36 @@ $originalBuildDir = "$destinationDirectory/$($windowsTargetName.Replace('-debloa
 if (Test-Path $originalBuildDir) {
     Write-Host "Copying build directory for post-processing..." -ForegroundColor Yellow
     Copy-Item -Recurse $originalBuildDir $buildDirectory -Force
+    
+    # Patch CustomAppsList.txt và ConvertConfig.ini nếu cả hai file đều tồn tại
+    $convertConfigPath = "$buildDirectory/ConvertConfig.ini"
+    $customAppsListPath = "$buildDirectory/CustomAppsList.txt"
+    $patchedCustomList = $false
+    if (Test-Path $convertConfigPath -and Test-Path $customAppsListPath) {
+        Write-Host "Patching CustomAppsList.txt to only keep 3 core apps..." -ForegroundColor Yellow
+        $coreAppsContent = @(
+            "Microsoft.WindowsCalculator",
+            "Microsoft.WindowsNotepad",
+            "Microsoft.WindowsStore"
+        ) -join "`n"
+        Set-Content -Path $customAppsListPath -Value $coreAppsContent -Encoding UTF8
+        Write-Host "✅ Patched CustomAppsList.txt" -ForegroundColor Green
+
+        # Patch ConvertConfig.ini
+        Write-Host "Patching ConvertConfig.ini for CustomList=1 and AddUpdates=0..." -ForegroundColor Yellow
+        $convertConfig = Get-Content $convertConfigPath
+        $convertConfig = $convertConfig -replace '^(CustomList\s*)=.*','$1=1'
+        $convertConfig = $convertConfig -replace '^(AddUpdates\s*)=.*','$1=0'
+        if ($convertConfig -notmatch '^CustomList\s*=') {
+            $convertConfig += "CustomList=1"
+        }
+        if ($convertConfig -notmatch '^AddUpdates\s*=') {
+            $convertConfig += "AddUpdates=0"
+        }
+        Set-Content -Path $convertConfigPath -Value $convertConfig -Encoding ASCII
+        Write-Host "✅ Patched ConvertConfig.ini" -ForegroundColor Green
+        $patchedCustomList = $true
+    }
 }
 
 Write-Host "`n=== STEP 2: Post-Process WIM (Remove Bloatware) ===" -ForegroundColor Cyan
@@ -158,4 +188,26 @@ Write-Host "`n=== DEBLOATING COMPLETE! ===" -ForegroundColor Green
 Write-Host "Debloated ISO: $isoPath" -ForegroundColor Cyan
 Write-Host "Metadata: $metadataPath" -ForegroundColor Cyan
 Write-Host "Apps Removed: $removedCount" -ForegroundColor Yellow
-Write-Host "Apps Kept: $keptCount (Core only)" -ForegroundColor Yellow 
+Write-Host "Apps Kept: $keptCount (Core only)" -ForegroundColor Yellow
+
+# Nếu đã patch CustomAppsList.txt thì bỏ qua bước mount WIM và DISM
+if ($patchedCustomList) {
+    Write-Host "CustomAppsList.txt and ConvertConfig.ini patched. Skipping WIM mount/DISM debloat." -ForegroundColor Cyan
+    # Tạo metadata đơn giản
+    $metadata = @{
+        name = $windowsTargetName
+        title = "Windows Debloated (Ultra-Lite, CustomList)"
+        debloated = $true
+        coreAppsOnly = $true
+        method = "CustomAppsList patch (no DISM)"
+        createdDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    }
+    $isoName = "$windowsTargetName-debloated.iso"
+    $isoPath = "$destinationDirectory\$isoName"
+    $metadataPath = "$isoPath.json"
+    $metadata | ConvertTo-Json -Depth 10 | Set-Content $metadataPath
+    Write-Host "=== DEBLOATING COMPLETE (CustomList)! ===" -ForegroundColor Green
+    Write-Host "Debloated ISO: $isoPath" -ForegroundColor Cyan
+    Write-Host "Metadata: $metadataPath" -ForegroundColor Cyan
+    exit 0
+} 
