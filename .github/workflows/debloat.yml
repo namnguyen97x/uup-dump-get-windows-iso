@@ -115,6 +115,12 @@ jobs:
             
             # Clean up zip file
             Remove-Item -Path $artifactZip -Force
+            
+            # List extracted contents
+            Write-Host "Extracted contents:"
+            Get-ChildItem -Path $artifactDir -Recurse | ForEach-Object {
+              Write-Host "  - $($_.Name)"
+            }
           }
           catch {
             Write-Error "Failed to download artifact: $($_.Exception.Message)"
@@ -181,15 +187,59 @@ jobs:
         id: find-manual-iso
         run: |
           $artifactPath = "artifacts\manual"
-          $isoFile = Get-ChildItem -Path $artifactPath -Filter "*.iso" -Recurse | Select-Object -First 1
-          if ($isoFile) {
-            echo "iso_path=$($isoFile.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            echo "iso_name=$($isoFile.BaseName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            Write-Host "Found ISO: $($isoFile.Name)"
-          } else {
-            Write-Error "No ISO file found in manual artifact"
-            exit 1
+          
+          # Find all ISO files
+          $isoFiles = Get-ChildItem -Path $artifactPath -Filter "*.iso" -Recurse
+          Write-Host "Found $($isoFiles.Count) ISO files:"
+          for ($i = 0; $i -lt $isoFiles.Count; $i++) {
+            $size = [math]::Round($isoFiles[$i].Length / 1GB, 2)
+            Write-Host "  [$($i + 1)] $($isoFiles[$i].Name) ($size GB)"
           }
+          
+          # Auto-detect Windows edition from filename
+          $detectedEdition = ""
+          foreach ($isoFile in $isoFiles) {
+            $fileName = $isoFile.Name.ToLower()
+            if ($fileName -like "*windows-11-24h2*") {
+              $detectedEdition = "Windows 11 Pro"
+              $selectedIso = $isoFile
+              Write-Host "Auto-detected: Windows 11 24H2"
+              break
+            } elseif ($fileName -like "*windows-11-23h2*") {
+              $detectedEdition = "Windows 11 Pro"
+              $selectedIso = $isoFile
+              Write-Host "Auto-detected: Windows 11 23H2"
+              break
+            } elseif ($fileName -like "*window-server-2025*") {
+              $detectedEdition = "Windows Server 2025"
+              $selectedIso = $isoFile
+              Write-Host "Auto-detected: Windows Server 2025"
+              break
+            } elseif ($fileName -like "*windows-11*") {
+              $detectedEdition = "Windows 11 Pro"
+              $selectedIso = $isoFile
+              Write-Host "Auto-detected: Windows 11"
+              break
+            } elseif ($fileName -like "*windows-10*") {
+              $detectedEdition = "Windows 10 Pro"
+              $selectedIso = $isoFile
+              Write-Host "Auto-detected: Windows 10"
+              break
+            }
+          }
+          
+          # If no specific edition found, use first ISO
+          if (-not $selectedIso) {
+            $selectedIso = $isoFiles[0]
+            $detectedEdition = "Windows 11 Pro"
+            Write-Host "Using first ISO: $($selectedIso.Name)"
+          }
+          
+          echo "iso_path=$($selectedIso.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          echo "iso_name=$($selectedIso.BaseName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          echo "detected_edition=$detectedEdition" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Selected ISO: $($selectedIso.Name)"
+          Write-Host "Detected Edition: $detectedEdition"
           
       - name: Copy ISO to debloat directory
         run: |
@@ -211,9 +261,13 @@ jobs:
           Set-Location debloat
           $outputName = "${{ steps.setup-iso.outputs.iso_name || steps.find-iso.outputs.iso_name || steps.find-manual-iso.outputs.iso_name }}-Debloated"
           
+          # Use detected edition if available, otherwise use input
+          $edition = "${{ steps.find-manual-iso.outputs.detected_edition || github.event.inputs.win_edition || 'Windows 11 Pro' }}"
+          Write-Host "Using Windows edition: $edition"
+          
           .\debloat-iso.ps1 -noPrompt `
             -isoPath "${{ steps.setup-iso.outputs.iso_path || steps.find-iso.outputs.iso_path || steps.find-manual-iso.outputs.iso_path }}" `
-            -winEdition "${{ github.event.inputs.win_edition || 'Windows 11 Pro' }}" `
+            -winEdition "$edition" `
             -outputISO $outputName `
             -AppxRemove "${{ github.event.inputs.appx_remove || 'yes' }}" `
             -CapabilitiesRemove "yes" `
@@ -252,6 +306,7 @@ jobs:
         run: |
           $originalPath = "${{ steps.setup-iso.outputs.iso_path || steps.find-iso.outputs.iso_path || steps.find-manual-iso.outputs.iso_path }}"
           $isoFile = Get-ChildItem -Path debloat -Filter "*.iso" | Select-Object -First 1
+          $edition = "${{ steps.find-manual-iso.outputs.detected_edition || github.event.inputs.win_edition || 'Windows 11 Pro' }}"
           
           if (Test-Path $originalPath -and $isoFile) {
             $originalSize = (Get-Item $originalPath).Length / 1GB
@@ -265,6 +320,7 @@ jobs:
             | Property | Value |
             | :--- | :--- |
             | Original ISO | $(Split-Path $originalPath -Leaf) |
+            | Windows Edition | $edition |
             | Original Size | $([math]::Round($originalSize, 2)) GB |
             | Debloated Size | $([math]::Round($debloatedSize, 2)) GB |
             | Space Saved | $([math]::Round($savedSpace, 2)) GB ($savedPercent%) |
@@ -288,6 +344,8 @@ jobs:
             ## Debloat Summary
             
             Debloat process completed successfully!
+            
+            ### Windows Edition: $edition
             
             ### Settings used:
             - Appx Remove: ${{ github.event.inputs.appx_remove || 'yes' }}
