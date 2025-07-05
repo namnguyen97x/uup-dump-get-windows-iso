@@ -2,11 +2,6 @@ name: Debloat Windows ISO
 
 on:
   workflow_dispatch:
-    inputs:
-      workflow_run_url:
-        description: 'GitHub Actions workflow run URL (e.g. https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/16066705847)'
-        required: true
-        type: string
 
 jobs:
   debloat:
@@ -18,7 +13,7 @@ jobs:
       - name: Parse workflow run info
         id: parse
         run: |
-          $url = '${{ github.event.inputs.workflow_run_url }}'
+          $url = 'https://github.com/namnguyen97x/uup-dump-get-windows-iso/actions/runs/16087270067'
           if ($url -notmatch '/actions/runs/(\d+)') {
             Write-Error "Invalid workflow run URL: $url"
             exit 1
