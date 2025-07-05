@@ -1,0 +1,298 @@
+name: Debloat Windows ISO
+
+on:
+  workflow_run:
+    workflows: ["build"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      artifact_url:
+        description: 'Direct artifact download URL (from GitHub Actions)'
+        required: false
+        default: ''
+        type: string
+      target_artifact:
+        description: 'Target artifact name to debloat (if not using URL)'
+        required: false
+        default: ''
+        type: string
+      iso_path:
+        description: 'Direct ISO file path (if not using artifacts)'
+        required: false
+        default: ''
+        type: string
+      win_edition:
+        description: 'Windows edition to debloat'
+        required: false
+        default: 'Windows 11 Pro'
+        type: string
+      appx_remove:
+        description: 'Remove Microsoft Store apps'
+        required: false
+        default: 'yes'
+        type: choice
+        options:
+        - yes
+        - no
+      onedrive_remove:
+        description: 'Remove OneDrive completely'
+        required: false
+        default: 'yes'
+        type: choice
+        options:
+        - yes
+        - no
+      edge_remove:
+        description: 'Remove Microsoft Edge browser'
+        required: false
+        default: 'yes'
+        type: choice
+        options:
+        - yes
+        - no
+      tpm_bypass:
+        description: 'Bypass TPM & hardware checks'
+        required: false
+        default: 'no'
+        type: choice
+        options:
+        - yes
+        - no
+
+jobs:
+  debloat:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Show available disk space
+        run: Get-PSDrive -PSProvider FileSystem
+        
+      - name: Setup ISO source
+        id: setup-iso
+        run: |
+          if ("${{ github.event.inputs.artifact_url }}" -ne "") {
+            # Use direct artifact URL
+            echo "iso_source=url" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            echo "artifact_url=${{ github.event.inputs.artifact_url }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Using direct artifact URL: ${{ github.event.inputs.artifact_url }}"
+          } elseif ("${{ github.event.inputs.iso_path }}" -ne "") {
+            # Use direct ISO path
+            echo "iso_source=direct" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            echo "iso_path=${{ github.event.inputs.iso_path }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            echo "iso_name=$(Split-Path '${{ github.event.inputs.iso_path }}' -LeafBase)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Using direct ISO path: ${{ github.event.inputs.iso_path }}"
+          } else {
+            # Use artifacts from build workflow
+            echo "iso_source=artifacts" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Will download artifacts from build workflow"
+          }
+          
+      - name: Download artifact from URL
+        if: steps.setup-iso.outputs.iso_source == 'url'
+        run: |
+          $artifactUrl = "${{ steps.setup-iso.outputs.artifact_url }}"
+          $artifactZip = "artifact.zip"
+          $artifactDir = "artifacts\manual"
+          
+          Write-Host "Downloading artifact from: $artifactUrl"
+          
+          # Create directory
+          if (-not (Test-Path $artifactDir)) {
+            New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+          }
+          
+          # Download artifact
+          try {
+            Invoke-WebRequest -Uri $artifactUrl -OutFile $artifactZip
+            Write-Host "Downloaded artifact: $artifactZip"
+            
+            # Extract artifact
+            Expand-Archive -Path $artifactZip -DestinationPath $artifactDir -Force
+            Write-Host "Extracted artifact to: $artifactDir"
+            
+            # Clean up zip file
+            Remove-Item -Path $artifactZip -Force
+          }
+          catch {
+            Write-Error "Failed to download artifact: $($_.Exception.Message)"
+            exit 1
+          }
+          
+      - name: Download build artifacts
+        if: steps.setup-iso.outputs.iso_source == 'artifacts'
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: List available artifacts
+        if: steps.setup-iso.outputs.iso_source == 'artifacts'
+        run: |
+          Write-Host "Available artifacts:"
+          Get-ChildItem -Path artifacts -Directory | ForEach-Object {
+            Write-Host "  - $($_.Name)"
+          }
+          
+      - name: Get target artifact
+        if: steps.setup-iso.outputs.iso_source == 'artifacts'
+        id: get-target
+        run: |
+          if ("${{ github.event.inputs.target_artifact }}" -ne "") {
+            $target = "${{ github.event.inputs.target_artifact }}"
+          } else {
+            # Get the most recent artifact
+            $artifacts = Get-ChildItem -Path artifacts -Directory | Sort-Object LastWriteTime -Descending
+            if ($artifacts.Count -gt 0) {
+              $target = $artifacts[0].Name
+            } else {
+              Write-Error "No artifacts found"
+              exit 1
+            }
+          }
+          echo "target=$target" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Selected target: $target"
+          
+      - name: Set manual artifact target
+        if: steps.setup-iso.outputs.iso_source == 'url'
+        id: set-manual-target
+        run: |
+          echo "target=manual" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Using manual artifact target"
+          
+      - name: Find ISO file from artifacts
+        if: steps.setup-iso.outputs.iso_source == 'artifacts'
+        id: find-iso
+        run: |
+          $artifactPath = "artifacts\${{ steps.get-target.outputs.target }}"
+          $isoFile = Get-ChildItem -Path $artifactPath -Filter "*.iso" | Select-Object -First 1
+          if ($isoFile) {
+            echo "iso_path=$($isoFile.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            echo "iso_name=$($isoFile.BaseName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Found ISO: $($isoFile.Name)"
+          } else {
+            Write-Error "No ISO file found in artifact"
+            exit 1
+          }
+          
+      - name: Find ISO file from manual artifact
+        if: steps.setup-iso.outputs.iso_source == 'url'
+        id: find-manual-iso
+        run: |
+          $artifactPath = "artifacts\manual"
+          $isoFile = Get-ChildItem -Path $artifactPath -Filter "*.iso" -Recurse | Select-Object -First 1
+          if ($isoFile) {
+            echo "iso_path=$($isoFile.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            echo "iso_name=$($isoFile.BaseName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Found ISO: $($isoFile.Name)"
+          } else {
+            Write-Error "No ISO file found in manual artifact"
+            exit 1
+          }
+          
+      - name: Copy ISO to debloat directory
+        run: |
+          $sourcePath = "${{ steps.setup-iso.outputs.iso_path || steps.find-iso.outputs.iso_path || steps.find-manual-iso.outputs.iso_path }}"
+          $targetPath = "debloat\$(Split-Path $sourcePath -Leaf)"
+          
+          if (Test-Path $sourcePath) {
+            Copy-Item -Path $sourcePath -Destination $targetPath -Force
+            echo "iso_path=$targetPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            echo "iso_name=${{ steps.setup-iso.outputs.iso_name || steps.find-iso.outputs.iso_name || steps.find-manual-iso.outputs.iso_name }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Copied ISO to: $targetPath"
+          } else {
+            Write-Error "Source ISO not found: $sourcePath"
+            exit 1
+          }
+          
+      - name: Run debloat script
+        run: |
+          Set-Location debloat
+          $outputName = "${{ steps.setup-iso.outputs.iso_name || steps.find-iso.outputs.iso_name || steps.find-manual-iso.outputs.iso_name }}-Debloated"
+          
+          .\debloat-iso.ps1 -noPrompt `
+            -isoPath "${{ steps.setup-iso.outputs.iso_path || steps.find-iso.outputs.iso_path || steps.find-manual-iso.outputs.iso_path }}" `
+            -winEdition "${{ github.event.inputs.win_edition || 'Windows 11 Pro' }}" `
+            -outputISO $outputName `
+            -AppxRemove "${{ github.event.inputs.appx_remove || 'yes' }}" `
+            -CapabilitiesRemove "yes" `
+            -OnedriveRemove "${{ github.event.inputs.onedrive_remove || 'yes' }}" `
+            -EDGERemove "${{ github.event.inputs.edge_remove || 'yes' }}" `
+            -TPMBypass "${{ github.event.inputs.tpm_bypass || 'no' }}" `
+            -UserFoldersEnable "yes" `
+            -ESDConvert "no" `
+            -useOscdimg "yes"
+            
+      - name: Show disk space after debloat
+        run: Get-PSDrive -PSProvider FileSystem
+        
+      - name: List debloated files
+        run: |
+          Set-Location debloat
+          Write-Host "Debloated files:"
+          Get-ChildItem -Filter "*.iso" | ForEach-Object {
+            $size = [math]::Round($_.Length / 1GB, 2)
+            Write-Host "  - $($_.Name) ($size GB)"
+          }
+          Get-ChildItem -Filter "*.sha256.txt" | ForEach-Object {
+            Write-Host "  - $($_.Name)"
+          }
+          
+      - name: Upload debloated ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.setup-iso.outputs.iso_name || steps.find-iso.outputs.iso_name || steps.find-manual-iso.outputs.iso_name }}-Debloated
+          path: |
+            debloat/*.iso
+            debloat/*.sha256.txt
+          retention-days: 30
+          
+      - name: Create debloat summary
+        run: |
+          $originalPath = "${{ steps.setup-iso.outputs.iso_path || steps.find-iso.outputs.iso_path || steps.find-manual-iso.outputs.iso_path }}"
+          $isoFile = Get-ChildItem -Path debloat -Filter "*.iso" | Select-Object -First 1
+          
+          if (Test-Path $originalPath -and $isoFile) {
+            $originalSize = (Get-Item $originalPath).Length / 1GB
+            $debloatedSize = $isoFile.Length / 1GB
+            $savedSpace = $originalSize - $debloatedSize
+            $savedPercent = [math]::Round(($savedSpace / $originalSize) * 100, 1)
+            
+            Add-Content $env:GITHUB_STEP_SUMMARY @"
+            ## Debloat Summary
+            
+            | Property | Value |
+            | :--- | :--- |
+            | Original ISO | $(Split-Path $originalPath -Leaf) |
+            | Original Size | $([math]::Round($originalSize, 2)) GB |
+            | Debloated Size | $([math]::Round($debloatedSize, 2)) GB |
+            | Space Saved | $([math]::Round($savedSpace, 2)) GB ($savedPercent%) |
+            | Debloated File | $($isoFile.Name) |
+            
+            ### What was removed:
+            - Microsoft Store apps (Candy Crush, Disney+, Spotify, etc.)
+            - OneDrive integration
+            - Microsoft Edge browser
+            - Optional Windows features
+            - Telemetry components
+            
+            ### Settings used:
+            - Appx Remove: ${{ github.event.inputs.appx_remove || 'yes' }}
+            - OneDrive Remove: ${{ github.event.inputs.onedrive_remove || 'yes' }}
+            - Edge Remove: ${{ github.event.inputs.edge_remove || 'yes' }}
+            - TPM Bypass: ${{ github.event.inputs.tpm_bypass || 'no' }}
+            "@
+          } else {
+            Add-Content $env:GITHUB_STEP_SUMMARY @"
+            ## Debloat Summary
+            
+            Debloat process completed successfully!
+            
+            ### Settings used:
+            - Appx Remove: ${{ github.event.inputs.appx_remove || 'yes' }}
+            - OneDrive Remove: ${{ github.event.inputs.onedrive_remove || 'yes' }}
+            - Edge Remove: ${{ github.event.inputs.edge_remove || 'yes' }}
+            - TPM Bypass: ${{ github.event.inputs.tpm_bypass || 'no' }}
+            "@
+          } 
