@@ -90,10 +90,19 @@ $Red = "Red"
 $Green = "Green"
 $Yellow = "Yellow"
 $Blue = "Blue"
+$Cyan = "Cyan"
 
 function Write-ColorOutput {
     param([string]$Message, [string]$Color = "White")
-    Write-Host $Message -ForegroundColor $Color
+    
+    # Validate color parameter to prevent errors
+    $validColors = @("Black", "DarkBlue", "DarkGreen", "DarkCyan", "DarkRed", "DarkMagenta", "DarkYellow", "Gray", "DarkGray", "Blue", "Green", "Cyan", "Red", "Magenta", "Yellow", "White")
+    
+    if ([string]::IsNullOrWhiteSpace($Color) -or $validColors -notcontains $Color) {
+        Write-Host $Message
+    } else {
+        Write-Host $Message -ForegroundColor $Color
+    }
 }
 
 function Test-Administrator {
@@ -596,7 +605,8 @@ function Create-ISO {
     
     Write-ColorOutput "Đang tạo ISO file..." $Yellow
     
-    $isoPath = Join-Path $scriptPath "$outputName.iso"
+    # Create output in current directory (debloat folder when called from workflow)
+    $isoPath = Join-Path (Get-Location) "$outputName.iso"
     
     # Copy original ISO structure
     $tempDir = Join-Path $workingDir "iso_temp"
@@ -653,6 +663,7 @@ function Create-ISO {
     }
     else {
         Write-ColorOutput "Lỗi khi tạo ISO file!" $Red
+        Write-ColorOutput "Kiểm tra lại quá trình tạo ISO và thử lại." $Red
         exit 1
     }
 }
@@ -743,12 +754,21 @@ try {
         Create-ISO -newWimPath $newWimPath -driveLetter $driveLetter -outputName $outputName -useOscdimg $useOscdimg
         
         Write-ColorOutput "`n=== Debloat hoàn tất! ===" $Green
-        Write-ColorOutput "ISO file: $scriptPath\$outputName.iso" $Green
-        Write-ColorOutput "Kích thước: $([math]::Round((Get-Item "$scriptPath\$outputName.iso").Length / 1GB, 2)) GB" $Green
+        $finalIsoPath = Join-Path (Get-Location) "$outputName.iso"
+        
+        # Verify the final output file exists
+        if (-not (Test-Path $finalIsoPath)) {
+            Write-ColorOutput "Lỗi: File ISO đã debloat không tồn tại tại: $finalIsoPath" $Red
+            Write-ColorOutput "Kiểm tra lại quá trình tạo ISO." $Red
+            exit 1
+        }
+        
+        Write-ColorOutput "ISO file: $finalIsoPath" $Green
+        Write-ColorOutput "Kích thước: $([math]::Round((Get-Item $finalIsoPath).Length / 1GB, 2)) GB" $Green
         
         # Show space saved
         $originalSize = (Get-Item $isoPath).Length / 1GB
-        $debloatedSize = (Get-Item "$scriptPath\$outputName.iso").Length / 1GB
+        $debloatedSize = (Get-Item $finalIsoPath).Length / 1GB
         $savedSpace = $originalSize - $debloatedSize
         $savedPercent = [math]::Round(($savedSpace / $originalSize) * 100, 1)
         Write-ColorOutput "Tiết kiệm: $([math]::Round($savedSpace, 2)) GB ($savedPercent%)" $Green
