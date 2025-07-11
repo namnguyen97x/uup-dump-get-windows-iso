@@ -240,14 +240,14 @@ function Get-WindowsIso($name, $destinationDirectory) {
     $downloadPackageBody = if ($iso.virtualEdition) {
         @{
             autodl = 3
-            updates = 1
+            updates = 0
             cleanup = 1
             'virtualEditions[]' = $iso.virtualEdition
         }
     } else {
         @{
             autodl = 2
-            updates = 1
+            updates = 0
             cleanup = 1
         }
     }
