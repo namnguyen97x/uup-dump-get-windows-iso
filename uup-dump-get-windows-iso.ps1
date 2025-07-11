@@ -17,22 +17,12 @@ trap {
 $TARGETS = @{
     # see https://en.wikipedia.org/wiki/Windows_11
     # see https://en.wikipedia.org/wiki/Windows_11_version_history
-    "windows-11-24h2" = @{
-        search = "window 11 26100 amd64" # aka 24H2. Enterprise EOL: October 14, 2027.
+    "windows-11-25h2" = @{
+        search = "Windows 11 Insider Preview 10.0.26200" # aka 24H2. Enterprise EOL: October 14, 2027.
         edition = "Professional"
         virtualEdition = $null #Enterprise
     }
-    "windows-11-23h2" = @{
-        search = "window 11 22631 amd64" # aka 23H2. Enterprise EOL: November 11, 2025.
-        edition = "Professional"
-        virtualEdition = $null #Enterprise
-    }
-    # see https://en.wikipedia.org/wiki/Windows_Server_2025
-    "window-server-2025" = @{
-        search = "window server 2025" # 
-        edition = "ServerStandard"
-        virtualEdition = $null
-    }
+    
 }
 
 function New-QueryString([hashtable]$parameters) {
