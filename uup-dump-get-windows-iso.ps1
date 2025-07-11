@@ -17,8 +17,8 @@ trap {
 $TARGETS = @{
     # see https://en.wikipedia.org/wiki/Windows_11
     # see https://en.wikipedia.org/wiki/Windows_11_version_history
-    "windows-11-25h2" = @{
-        search = "Windows 11 Insider Preview 10.0.26200 amd64" # aka 25H2. Enterprise EOL: October 14, 2027.
+    "windows-11-23h2" = @{
+        search = " Windows 11, version 23H2  amd64" # aka 23H2. Enterprise EOL: October 14, 2027.
         edition = "Professional"
         virtualEdition = $null #Enterprise
     }
