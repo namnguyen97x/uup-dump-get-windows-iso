@@ -47,7 +47,7 @@ jobs:
             Write-Host "Attempting to find available artifacts..."
             
             # Try Windows version artifacts (actual artifact names from build.yml)
-            $possibleArtifacts = @("windows-11", "windows-2022", "windows-10", "windows-server-2025")
+            $possibleArtifacts = @("windows-11", "windows-10", "windows-server-2025")
             $artifactName = $null
             
             foreach ($artifact in $possibleArtifacts) {
