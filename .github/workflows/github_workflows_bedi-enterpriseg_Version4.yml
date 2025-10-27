@@ -1,0 +1,114 @@
+name: bedi-enterpriseg
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: 'Artifact name from build workflow (e.g. 22621, 22000) - leave empty to use latest'
+        required: false
+        default: ''
+      build:
+        description: 'Build number folder to create/use (e.g. 22000)'
+        required: true
+        default: '22000'
+      wim_index:
+        description: 'WIM/ESD image index to use (1 for typical single-index images)'
+        required: true
+        default: '1'
+      target:
+        description: 'Target SKU for Bedi (EnterpriseG)'
+        required: true
+        default: 'EnterpriseG'
+
+jobs:
+  bedi-enterpriseg:
+    runs-on: [self-hosted, windows]
+    env:
+      ROOT: ${{ github.workspace }}\Bedi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download ISO from build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ github.event.inputs.artifact_name || github.event.inputs.build }}
+          path: artifacts
+          if-no-files-found: error
+
+      - name: Prepare ISO for Bedi
+        shell: pwsh
+        run: |
+          # Find the ISO file in artifacts
+          $isoFile = Get-ChildItem -Path "artifacts" -Filter "*.iso" | Select-Object -First 1
+          if (-not $isoFile) {
+            Write-Error "No ISO file found in artifacts. Check artifact name: ${{ github.event.inputs.artifact_name || github.event.inputs.build }}"
+            exit 1
+          }
+          
+          # Ensure Bedi directory exists
+          if (-not (Test-Path -Path "${{ github.workspace }}\Bedi")) {
+            New-Item -ItemType Directory -Path "${{ github.workspace }}\Bedi" | Out-Null
+          }
+          if (-not (Test-Path -Path "${{ github.workspace }}\Bedi\Files")) {
+            New-Item -ItemType Directory -Path "${{ github.workspace }}\Bedi\Files" | Out-Null
+          }
+          
+          # Copy ISO to Bedi directory for processing
+          $targetIso = Join-Path "${{ github.workspace }}\Bedi" "uup.iso"
+          Copy-Item -Path $isoFile.FullName -Destination $targetIso -Force
+          Write-Host "ISO copied to: $targetIso"
+          Write-Host "ISO size: $((Get-Item $targetIso).Length / 1GB) GB"
+          
+          # Show artifact info
+          $jsonFile = Get-ChildItem -Path "artifacts" -Filter "*.json" | Select-Object -First 1
+          if ($jsonFile) {
+            $buildInfo = Get-Content $jsonFile.FullName | ConvertFrom-Json
+            Write-Host "Build Info:"
+            Write-Host "  Name: $($buildInfo.name)"
+            Write-Host "  Build: $($buildInfo.build)"
+            Write-Host "  Title: $($buildInfo.title)"
+          }
+
+      - name: Ensure Bedi Files folder exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -Path "${{ github.workspace }}\Bedi")) {
+            New-Item -ItemType Directory -Path "${{ github.workspace }}\Bedi" | Out-Null
+          }
+          if (-not (Test-Path -Path "${{ github.workspace }}\Bedi\Files")) {
+            New-Item -ItemType Directory -Path "${{ github.workspace }}\Bedi\Files" | Out-Null
+          }
+
+      - name: Validate runner prerequisites
+        shell: pwsh
+        run: |
+          Write-Host "Checking DISM availability"
+          if (-not (Get-Command dism.exe -ErrorAction SilentlyContinue)) {
+            Write-Error "dism.exe not found in PATH. The runner must be a Windows machine with DISM available."
+            exit 1
+          }
+          Write-Host "Checking PowerShell version"
+          if ($PSVersionTable.PSVersion.Major -lt 5) {
+            Write-Error "PowerShell 5+ required on the runner."
+            exit 1
+          }
+
+      - name: Run Bedi CI wrapper
+        shell: pwsh
+        run: |
+          $script = Join-Path ${{ github.workspace }} 'Bedi\Bedi_bedi-ci-wrapper_Version3.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Error "Wrapper script not found: $script. Ensure Bedi/Bedi_bedi-ci-wrapper_Version3.ps1 exists in the repo."
+            exit 1
+          }
+          & powershell -ExecutionPolicy Bypass -NoProfile -File $script -IsoPath "Bedi\uup.iso" -Build "${{ github.event.inputs.build }}" -WimIndex "${{ github.event.inputs.wim_index }}" -TargetSKU "${{ github.event.inputs.target }}"
+
+      - name: Upload build artifacts (WIM/ESD/logs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bedi-output-${{ github.event.inputs.build }}
+          path: |
+            Bedi\*.wim
+            Bedi\*.esd
+            Bedi\log*
+            Bedi\*.log
