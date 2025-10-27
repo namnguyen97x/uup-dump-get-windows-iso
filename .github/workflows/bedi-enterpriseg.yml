@@ -46,8 +46,8 @@ jobs:
             # For workflow_run trigger, try to find available artifacts
             Write-Host "Attempting to find available artifacts..."
             
-            # Try common build numbers in order of preference
-            $possibleArtifacts = @("22621", "22000", "19041", "17763", "15063", "25398", "26100")
+            # Try Windows version artifacts (actual artifact names from build.yml)
+            $possibleArtifacts = @("windows-11", "windows-2022", "windows-10", "windows-server-2025")
             $artifactName = $null
             
             foreach ($artifact in $possibleArtifacts) {
@@ -72,8 +72,8 @@ jobs:
             }
             
             if (-not $artifactName) {
-              Write-Warning "No available artifacts found. Using default: 22621"
-              $artifactName = "22621"
+              Write-Warning "No available artifacts found. Using default: windows-11"
+              $artifactName = "windows-11"
             }
           }
           Write-Output "name=$artifactName" >> $env:GITHUB_OUTPUT
@@ -104,7 +104,6 @@ jobs:
         with:
           name: ${{ steps.artifact-name.outputs.name }}
           path: artifacts
-          if-no-files-found: error
 
       - name: Prepare ISO for Bedi
         shell: pwsh
