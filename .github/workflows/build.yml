@@ -4,13 +4,33 @@ on:
   schedule:
     - cron: '0 0 * * *' # chạy vào 0h sáng hàng ngày
 jobs:
+  setup:
+    runs-on: windows-2022
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Extract matrix from PowerShell script
+        id: set-matrix
+        run: |
+          $scriptContent = Get-Content 'uup-dump-get-windows-iso.ps1' -Raw
+          $targetsMatch = [regex]::Match($scriptContent, '\$TARGETS\s*=\s*@\s*\{([^}]+)\}')
+          if ($targetsMatch.Success) {
+            $targetsSection = $targetsMatch.Groups[1].Value
+            $targetNames = [regex]::Matches($targetsSection, '"([^"]+)"\s*=') | ForEach-Object { $_.Groups[1].Value }
+            $matrix = $targetNames | ForEach-Object { @{ name = $_ } } | ConvertTo-Json -Compress
+            Write-Output "matrix=$matrix" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Error "Could not find TARGETS configuration in PowerShell script"
+            exit 1
+          }
   build:
     strategy:
       matrix:
-        include:
-          - name: windows-11
-          - name: windows-2022
+        include: ${{ fromJson(needs.setup.outputs.matrix) }}
     runs-on: windows-2022
+    needs: setup
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,6 +65,7 @@ jobs:
     name: Release
     runs-on: ubuntu-22.04
     needs:
+      - setup
       - build
     steps:
       - name: Checkout
