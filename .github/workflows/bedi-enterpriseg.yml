@@ -104,6 +104,8 @@ jobs:
         with:
           name: ${{ steps.artifact-name.outputs.name }}
           path: artifacts
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
 
       - name: Prepare ISO for Bedi
         shell: pwsh
