@@ -25,7 +25,7 @@ on:
 
 jobs:
   bedi-enterpriseg:
-    runs-on: [self-hosted, windows]
+    runs-on: windows-2022
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     env:
       ROOT: ${{ github.workspace }}\Bedi
