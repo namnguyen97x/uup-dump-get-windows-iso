@@ -43,13 +43,61 @@ jobs:
               $artifactName = "${{ github.event.inputs.build }}"
             }
           } else {
-            # For workflow_run trigger, we need to find the latest successful build artifact
-            # This is a simplified approach - in practice you might want to parse the build matrix
-            $artifactName = "22621"  # Default fallback - you can improve this logic
-            Write-Host "Auto-detected artifact name: $artifactName"
+            # For workflow_run trigger, try to find available artifacts
+            Write-Host "Attempting to find available artifacts..."
+            
+            # Try common build numbers in order of preference
+            $possibleArtifacts = @("22621", "22000", "19041", "17763", "15063", "25398", "26100")
+            $artifactName = $null
+            
+            foreach ($artifact in $possibleArtifacts) {
+              Write-Host "Checking if artifact '$artifact' exists..."
+              try {
+                # Use GitHub API to check if artifact exists
+                $headers = @{
+                  'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+                  'Accept' = 'application/vnd.github+json'
+                }
+                $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" -Headers $headers
+                
+                $foundArtifact = $response.artifacts | Where-Object { $_.name -eq $artifact -and $_.expired -eq $false } | Select-Object -First 1
+                if ($foundArtifact) {
+                  $artifactName = $artifact
+                  Write-Host "Found available artifact: $artifact"
+                  break
+                }
+              } catch {
+                Write-Host "Error checking artifact '$artifact': $($_.Exception.Message)"
+              }
+            }
+            
+            if (-not $artifactName) {
+              Write-Warning "No available artifacts found. Using default: 22621"
+              $artifactName = "22621"
+            }
           }
           Write-Output "name=$artifactName" >> $env:GITHUB_OUTPUT
           Write-Host "Using artifact name: $artifactName"
+
+      - name: List available artifacts (debug)
+        shell: pwsh
+        run: |
+          Write-Host "Listing all available artifacts..."
+          try {
+            $headers = @{
+              'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+              'Accept' = 'application/vnd.github+json'
+            }
+            $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" -Headers $headers
+            
+            Write-Host "Total artifacts found: $($response.artifacts.Count)"
+            foreach ($artifact in $response.artifacts) {
+              $status = if ($artifact.expired) { "EXPIRED" } else { "AVAILABLE" }
+              Write-Host "  - $($artifact.name) ($status) - Created: $($artifact.created_at)"
+            }
+          } catch {
+            Write-Warning "Could not list artifacts: $($_.Exception.Message)"
+          }
 
       - name: Download ISO from build artifact
         uses: actions/download-artifact@v4
