@@ -15,12 +15,32 @@ jobs:
         id: set-matrix
         run: |
           $scriptContent = Get-Content 'uup-dump-get-windows-iso.ps1' -Raw
-          $targetsMatch = [regex]::Match($scriptContent, '\$TARGETS\s*=\s*@\s*\{([^}]+)\}')
-          if ($targetsMatch.Success) {
-            $targetsSection = $targetsMatch.Groups[1].Value
+          # Find the TARGETS hashtable section more accurately
+          $targetsPattern = '\$TARGETS\s*=\s*@\s*\{'
+          $startMatch = [regex]::Match($scriptContent, $targetsPattern)
+          if ($startMatch.Success) {
+            $startPos = $startMatch.Index + $startMatch.Length
+            $braceCount = 0
+            $endPos = $startPos
+            
+            # Find the matching closing brace by counting nested braces
+            for ($i = $startPos; $i -lt $scriptContent.Length; $i++) {
+              $char = $scriptContent[$i]
+              if ($char -eq '{') { $braceCount++ }
+              elseif ($char -eq '}') { 
+                $braceCount--
+                if ($braceCount -eq 0) {
+                  $endPos = $i
+                  break
+                }
+              }
+            }
+            
+            $targetsSection = $scriptContent.Substring($startPos, $endPos - $startPos)
             $targetNames = [regex]::Matches($targetsSection, '"([^"]+)"\s*=') | ForEach-Object { $_.Groups[1].Value }
             $matrix = $targetNames | ForEach-Object { @{ name = $_ } } | ConvertTo-Json -Compress
             Write-Output "matrix=$matrix" >> $env:GITHUB_OUTPUT
+            Write-Host "Extracted matrix: $matrix"
           } else {
             Write-Error "Could not find TARGETS configuration in PowerShell script"
             exit 1
