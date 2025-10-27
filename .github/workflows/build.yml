@@ -20,7 +20,7 @@ jobs:
           $startMatch = [regex]::Match($scriptContent, $targetsPattern)
           if ($startMatch.Success) {
             $startPos = $startMatch.Index + $startMatch.Length
-            $braceCount = 0
+            $braceCount = 1  # Start with 1 because we're inside the opening brace
             $endPos = $startPos
             
             # Find the matching closing brace by counting nested braces
