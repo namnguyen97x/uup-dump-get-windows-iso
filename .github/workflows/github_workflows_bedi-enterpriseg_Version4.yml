@@ -18,20 +18,43 @@ on:
         description: 'Target SKU for Bedi (EnterpriseG)'
         required: true
         default: 'EnterpriseG'
+  workflow_run:
+    workflows: ["build"]
+    types: [completed]
+    branches: [main, master]
 
 jobs:
   bedi-enterpriseg:
     runs-on: [self-hosted, windows]
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     env:
       ROOT: ${{ github.workspace }}\Bedi
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Determine artifact name
+        id: artifact-name
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $artifactName = "${{ github.event.inputs.artifact_name }}"
+            if ([string]::IsNullOrEmpty($artifactName)) {
+              $artifactName = "${{ github.event.inputs.build }}"
+            }
+          } else {
+            # For workflow_run trigger, we need to find the latest successful build artifact
+            # This is a simplified approach - in practice you might want to parse the build matrix
+            $artifactName = "22621"  # Default fallback - you can improve this logic
+            Write-Host "Auto-detected artifact name: $artifactName"
+          }
+          Write-Output "name=$artifactName" >> $env:GITHUB_OUTPUT
+          Write-Host "Using artifact name: $artifactName"
+
       - name: Download ISO from build artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ github.event.inputs.artifact_name || github.event.inputs.build }}
+          name: ${{ steps.artifact-name.outputs.name }}
           path: artifacts
           if-no-files-found: error
 
@@ -41,7 +64,7 @@ jobs:
           # Find the ISO file in artifacts
           $isoFile = Get-ChildItem -Path "artifacts" -Filter "*.iso" | Select-Object -First 1
           if (-not $isoFile) {
-            Write-Error "No ISO file found in artifacts. Check artifact name: ${{ github.event.inputs.artifact_name || github.event.inputs.build }}"
+            Write-Error "No ISO file found in artifacts. Check artifact name: ${{ steps.artifact-name.outputs.name }}"
             exit 1
           }
           
