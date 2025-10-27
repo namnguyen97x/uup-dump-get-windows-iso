@@ -1,0 +1,946 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\SideBySide\Configuration]
+"CBSLogCompress"=dword:00000001
+"DisableComponentBackups"=dword:00000001
+"DisableManifestCache"=dword:00000001
+"DisableResetbase"=dword:00000000
+"LCUReoffer"=dword:00000000
+"NumCBSPersistLogs"=dword:00000000
+"ReofferUpdate"=dword:00000000
+"SupersededActions"=dword:00000001
+"TransientManifestCache"=dword:00000001
+
+[-HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack]
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\Nls\Language]
+"Default"="0409"
+"InstallLanguage"="0409"
+
+;Dll files register and unreg
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\dllfile]
+"Position"="Top"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\dllfile\shell\Register]
+"MUIVerb"="@consent.exe,-3000"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\dllfile\shell\Register\command]
+@="regsvr32.exe \"%1\""
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\dllfile\shell\Unregister]
+"MUIVerb"="@consent.exe,-3001"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\dllfile\shell\Unregister\command]
+@="regsvr32.exe /u \"%1\""
+
+;Ocx files register and unreg
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\ocxfile]
+"Position"="Top"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\ocxfile\shell\Register]
+"MUIVerb"="@consent.exe,-3000"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\ocxfile\shell\Register\command]
+@="regsvr32.exe \"%1\""
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\ocxfile\shell\Unregister]
+"MUIVerb"="@consent.exe,-3001"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\ocxfile\shell\Unregister\command]
+@="regsvr32.exe /u \"%1\""
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Windows.IsoFile\shell\burn]
+"ProgrammaticAccessOnly"=""
+
+;Remove 3D Print ContextMenu
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.bmp\Shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.jpg\Shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.png\Shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.3ds\shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.3mf\shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.dae\shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.dxf\shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.obj\shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.ply\shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.stl\shell\3D Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.wrl\shell\3D Print]
+
+;Remove Print ContextMenu
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\batfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\cmdfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\docxfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\fonfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\htmlfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\JSFile\shell\Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\JSEFile\shell\Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\odtfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\otffile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\pfmfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\regfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\rtffile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\svgfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\ttcfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\ttffile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\InternetShortcut\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\VBEFile\shell\Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\VBSFile\shell\Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\WSFFile\shell\Print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\xhtmlfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\contact_wab_auto_file\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\group_wab_auto_file\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\wdpfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\zapfile\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.avci\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.avcs\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.avif\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.avifs\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.heic\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.heics\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.heif\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.heifs\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\.hif\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\SystemFileAssociations\image\shell\print]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\docxfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\giffile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\htmlfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\pjpegfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\jpegfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\odtfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\pngfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\rtffile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\svgfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\TIFImage.Document\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\InternetShortcut\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\xhtmlfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\txtfilelegacy\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\wdpfile\shell\printto]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\zapfile\shell\printto]
+
+;Disable Lock Workstation
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Policies\System]
+"DisableLockWorkstation"=dword:00000001
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Policies\System]
+"DisableLockWorkstation"=dword:00000001
+
+;Remove BitLocker ContextMenu
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\unlock-bde]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\manage-bde]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\resume-bde]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\resume-bde-elev]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\encrypt-bde]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\encrypt-bde-elev]
+
+; Remove New .rtf .zip
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\.rtf\ShellNew]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\.zip\CompressedFolder\ShellNew]
+; New file for .txt
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\.txt\ShellNew]
+"ItemName"=hex(2):40,00,25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,\
+  6f,00,74,00,25,00,5c,00,73,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,\
+  00,6e,00,6f,00,74,00,65,00,70,00,61,00,64,00,2e,00,65,00,78,00,65,00,2c,00,\
+  2d,00,34,00,37,00,30,00,00,00
+"NullFile"=""
+
+; Remove Troubleshoot Compatibility
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked]
+"{1d27f844-3a1f-4410-85ac-14651078412d}"=""
+
+;Remove double drive letter display in explorer
+[-HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\DelegateFolders\{F5FB2C77-0E2F-4A16-A381-3E560C68BC83}]
+[-HKEY_LOCAL_MACHINE\mtSOFT\WOW6432Node\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\DelegateFolders\{F5FB2C77-0E2F-4A16-A381-3E560C68BC83}]
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\Netlogon\Parameters]
+"DisablePasswordChange"=dword:00000000
+"MaximumPasswordAge"=dword:00000000
+"RequireSignOrSeal"=dword:00000000
+"RequireStrongKey"=dword:00000000
+"SealSecureChannel"=dword:00000000
+"SignSecureChannel"=dword:00000001
+"FullSecureChannelProtection"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\LanmanWorkstation\Parameters]
+"EnablePlainTextPassword"=dword:00000000
+"EnableSecuritySignature"=dword:00000001
+"RequireSecuritySignature"=dword:00000000
+"ServiceDllUnloadOnStop"=dword:00000001
+"AllowInsecureGuestAuth"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\LanmanServer\Parameters]
+"EnableAuthenticateUserSharing"=dword:00000000
+"NullSessionPipes"=hex(7):00,00,00,00
+"ServiceDllUnloadOnStop"=dword:00000001
+"AutoDisconnect"=dword:0000000f
+"AutoShareWks"=dword:00000000
+"EnableForcedLogOff"=dword:00000001
+"EnableSecuritySignature"=dword:00000000
+"RequireSecuritySignature"=dword:00000000
+"RestrictNullSessAccess"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\Session Manager\kernel]
+"ObCaseInsensitive"=dword:00000001
+
+;SYSPREP (ReArm) Windows more than three times
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform]
+"SkipRearm"=dword:00000001
+
+;Full UAC
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Policies\System]
+"ConsentPromptBehaviorAdmin"=dword:00000000
+"ConsentPromptBehaviorUser"=dword:00000000
+"DisableStartupSound"=dword:00000001
+"DisplayLastLogonInfo"=dword:00000000
+"DontDisplayLastUserName"=dword:00000000
+"EnableCursorSuppression"=dword:00000000
+"EnableFirstLogonAnimation"=dword:00000000
+"EnableFullTrustStartupTasks"=dword:00000002
+"EnableInstallerDetection"=dword:00000000
+"EnableLUA"=dword:00000000
+"EnableSecureUIAPaths"=dword:00000000
+"EnableUAC"=dword:00000000
+"EnableUIADesktopToggle"=dword:00000000
+"EnableUwpStartupTasks"=dword:00000002
+"EnableVirtualization"=dword:00000000
+"FilterAdministratorToken"=dword:00000000
+"LongPathsEnabled"=dword:00000001
+"PromptOnSecureDesktop"=dword:00000000
+"RunStartupScriptSync"=dword:00000000
+"ScForceOption"=dword:00000000
+"ShutdownWithoutLogon"=dword:00000001
+"SupportFullTrustStartupTasks"=dword:00000001
+"SupportUwpStartupTasks"=dword:00000001
+"UndockWithoutLogon"=dword:00000001
+"ValidateAdminCodeSignatures"=dword:00000000
+
+;n - Disable Background disk defragmentation / y - Enable How long in milliseconds you want to have for a startup delay time for desktop apps that run at startup to load
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Dfrg\BootOptimizeFunction]
+"Enable"="n"
+
+;Disable Automatic Maintenance / Scheduled System Maintenance
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\ScheduledDiagnostics]
+"EnabledExecution"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance]
+"MaintenanceDisabled"=dword:00000001
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\ScheduledDiagnostics]
+"EnabledExecution"=dword:00000000
+
+;Disable AutoPlay and AutoRun
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"NoAutorun"=dword:00000001
+"NoDriveTypeAutoRun"=dword:00000225
+
+;Disable TCP/IP6
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\TCPIP6]
+"Start"=dword:00000004
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\TCPIP6\Parameters]
+"EnableICSIPv6"=dword:00000000
+"DisabledComponents"=dword:ffffffff
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\TCPIP\v6Transition]
+"6to4_State"="Disabled"
+"ISATAP_State"="Disabled"
+"Teredo_State"="Disabled"
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\iphlpsvc]
+"Start"=dword:00000004
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\NcaSvc]
+"Start"=dword:00000004
+
+;Network Tweaks
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\Tcpip\Parameters]
+"DefaultTTL"=dword:00000041
+"GlobalMaxTcpWindowSize"=dword:0003ebc0
+"Tcp1323Opts"=dword:00000000
+"EnablePMTUDiscovery"=dword:00000001
+"EnablePMTUBHDetect"=dword:00000000
+"SackOpts"=dword:00000001
+"TcpMaxDupAcks"=dword:00000002
+
+;Determines in milliseconds how long the System waits for services to stop after notifying the service that the System is shutting down
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control]
+"WaitToKillServiceTimeout"="5000"
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\CrashControl]
+"AlwaysKeepMemoryDump"=dword:00000000
+"AutoReboot"=dword:00000000
+"CrashDumpEnabled"=dword:00000000
+"LogEvent"=dword:00000000
+
+;Disable swapfile.sys while preserving Pagefile.sys
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\Session Manager\Memory Management]
+"SwapfileControl"=dword:00000000
+
+;Prefetcher and Superfetch for boot files only
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\Session Manager\Memory Management\PrefetchParameters]
+"EnablePrefetcher"=dword:00000002
+"EnableSuperfetch"=dword:00000001
+"SfTracingState"=dword:00000000
+
+;5 - 5 secs / Delay Chkdsk startup time at OS Boot
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\Session Manager]
+"AutoChkTimeout"=dword:00000005
+
+;0 - Disable Fast Startup for a Full Shutdown / 1 - Enable Fast Startup (Hybrid Boot) for a Hybrid Shutdown
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\Session Manager\Power]
+"HiberbootEnabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\DiagTrack]
+"Start"=dword:00000004
+[-HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\WMI\AutoLogger\AutoLogger-Diagtrack-Listener]
+[-HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\WMI\AutoLogger\SQMLogger]
+
+; System_Managed, DisableLastAccessUpdates
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\FileSystem]
+"NtfsDisableLastAccessUpdate"=dword:00000001
+
+;VisualEffectBestFairPerformances
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects]
+"VisualFXSetting"=dword:00000003
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\AnimateMinMax]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ComboBoxAnimation]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ControlAnimations]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\CursorShadow]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DragFullWindows]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DropShadow]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMAeroPeekEnabled]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\DWMSaveThumbnailEnabled]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\FontSmoothing]
+"DefaultValue"=dword:00000001
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListBoxSmoothScrolling]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewAlphaSelect]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow]
+"DefaultValue"=dword:00000001
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\MenuAnimation]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\SelectionFade]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TaskbarAnimations]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ThumbnailsOrIcon]
+"DefaultValue"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\TooltipAnimation]
+"DefaultValue"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\TabletPC]
+"PreventHandwritingDataSharing"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\HandwritingErrorReports]
+"PreventHandwritingErrorReports"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\AppCompat]
+"DisableInventory"=dword:00000001
+"DisableUAR"=dword:00000001
+"AITEnable"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\Personalization]
+"NoLockScreenCamera"=dword:00000001
+"NoChangingLockScreen"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\AdvertisingInfo]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\PolicyManager\current\device\System]
+"AllowExperimentation"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\PolicyManager\current\device\Bluetooth]
+"AllowAdvertising"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\SQMClient\Windows]
+"CEIPEnable"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\Messaging]
+"AllowMessageSync"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\Windows Error Reporting]
+"Disabled"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Biometrics]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\System]
+"EnableActivityFeed"=dword:00000000
+"PublishUserActivities"=dword:00000000
+"UploadUserActivities"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\CredUI]
+"DisablePasswordReveal"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\WMDRM]
+"DisableOnline"=dword:00000001
+
+;Set explorer default launch to ThisPC, show ext, disable hover
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"ExtendedUIHoverTime"=dword:0000d6d8
+"Hidden"=dword:00000001
+"HideFileExt"=dword:00000000
+"LaunchTo"=dword:00000001
+"NavPaneExpandToCurrentFolder"=dword:00000001
+"NavPaneShowAllFolders"=dword:00000001
+"ShowSecondsInSystemClock"=dword:00000001
+"ShowSuperHidden"=dword:00000001
+"ShowSyncProviderNotifications"=dword:00000000
+"ShowTaskViewButton"=dword:00000000
+"UseCompactMode"=dword:00000001
+
+;Add_Network_Desktop_Icon
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel]
+"{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu]
+"{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}"=dword:00000000
+
+;Add_This-PC_Desktop_Icon
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel]
+"{20D04FE0-3AEA-1069-A2D8-08002B30309D}"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu]
+"{20D04FE0-3AEA-1069-A2D8-08002B30309D}"=dword:00000000
+
+;Change Visual Effects
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects]
+"VisualFXSetting"=dword:00000003
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Desktop]
+"AutoEndTasks"="1"
+"CursorBlinkRate"="530"
+"DragFullWindows"="0"
+"MenuShowDelay"="5"
+"FontSmoothing"="2"
+"UserPreferencesMask"=hex:90,12,01,80,10,00,00,00
+"HungAppTimeout"="3000"
+"LowLevelHooksTimeout"="3000"
+"WaitToKillAppTimeout"="5000"
+"WaitToKillServiceTimeout"="5000"
+
+; Do not Animate windows when minimizing and maximizing
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Desktop\WindowMetrics]
+"MinAnimate"="0"
+
+; Use drop shadows for icon labels on the desktop
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"ListviewShadow"="1"
+"TaskbarAnimations"=dword:0
+"ListviewAlphaSelect"="0"
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"TaskbarAnimations"="0"
+
+;Disable Peek
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\DWM]
+"EnableAeroPeek"=dword:0
+"CompositionPolicy"="0"
+"ColorizationOpaqueBlend"="0"
+"AlwaysHibernateThumbnails"=dword:00000000
+
+; Disable Explorer Thumbnails and control panel classic (All Users)
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer]
+"DisableThumbnails"=dword:00000001
+"ForceClassicControlPanel"=dword:00000001
+
+; Disable visual styles on windows and buttons
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\ThemeManager]
+"ThemeActive"="0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\ThemeManager]
+"ThemeActive"="0"
+
+;Disable taskbar thumbnail and peek
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer]
+"AltTabSettings"=dword:00000001
+"TaskbarNoThumbnail"=dword:00000001
+
+;Remove OneDrive
+[HKEY_LOCAL_MACHINE\mtUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\Run]
+"OneDriveSetup"=-
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Sound]
+"Beep"="no"
+"ExtendedSounds"="no"
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications]
+"GlobalUserDisabled"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Input\TIPC]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Messaging]
+"CloudServiceSyncEnabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\International\User Profile]
+"HttpAcceptLanguageOptOut"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\TabletTip\1.7]
+"EnableTextPrediction"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\AppHost]
+"EnableWebContentEvaluation"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced]
+"Start_TrackDocs"=dword:00000000
+"ShowSyncProviderNotifications"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Speech_OneCore\Settings\VoiceActivation\UserPreferenceForAllApps]
+"AgentActivationEnabled"=dword:00000000
+"AgentActivationOnLockScreenEnabled"=dword:00000000
+
+;Disable Sticky, Filter, Toggle Keys
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Accessibility\StickyKeys]
+"Flags"="506"
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Accessibility\Keyboard Response]
+"Flags"="122"
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Accessibility\ToggleKeys]
+"Flags"="58"
+
+[HKEY_LOCAL_MACHINE\mtUSER\AppEvents\Schemes\Names\.Default]
+@="@mmres.dll,-800"
+[HKEY_LOCAL_MACHINE\mtUSER\AppEvents\Schemes\Names\.None]
+@="No Sounds"
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\CommonGlobUserSettings\Control Panel\International]
+"Locale"="00000409"
+"LocaleName"="en-US"
+"s1159"="AM"
+"s2359"="PM"
+"sCurrency"="$"
+"sDate"=", "
+"sDecimal"="."
+"sGrouping"="3;0"
+"sLanguage"="ENU"
+"sList"=","
+"sLongDate"="dddd, d MMMM, yyyy"
+"sMonDecimalSep"="."
+"sMonGrouping"="3;0"
+"sMonThousandSep"=","
+"sNativeDigits"="0123456789"
+"sNegativeSign"="-"
+"sPositiveSign"=""
+"sShortDate"="ddd, dd-MMM-yy"
+"sThousand"=","
+"sTime"=":"
+"sTimeFormat"="HH:mm:ss"
+"sShortTime"="HH:mm"
+"sYearMonth"="MMMM yyyy"
+"iCalendarType"="1"
+"iCountry"="1"
+"iCurrDigits"="2"
+"iCurrency"="0"
+"iDate"="1"
+"iDigits"="2"
+"NumShape"="1"
+"iFirstDayOfWeek"="6"
+"iFirstWeekOfYear"="0"
+"iLZero"="1"
+"iMeasure"="1"
+"iNegCurr"="0"
+"iNegNumber"="1"
+"iPaperSize"="1"
+"iTime"="1"
+"iTimePrefix"="0"
+"iTLZero"="1"
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\CommonGlobUserSettings\Control Panel\International\Geo]
+"Name"="US"
+"Nation"="244"
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\CommonGlobUserSettings\Control Panel\International\User Profile]
+"Languages"=hex(7):65,00,6e,00,2d,00,55,00,53,00,00,00,00,00
+"ShowAutoCorrection"=dword:00000000
+"ShowTextPrediction"=dword:00000000
+"ShowCasing"=dword:00000001
+"ShowShiftLock"=dword:00000001
+"UserLocaleFromLanguageProfileOptOut"=dword:00000001
+"HttpAcceptLanguageOptOut"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Control\CommonGlobUserSettings\Control Panel\International\User Profile\en-US]
+"0409:00000409"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\International]
+"Locale"="00000409"
+"LocaleName"="en-US"
+"s1159"="AM"
+"s2359"="PM"
+"sCurrency"="$"
+"sDate"=", "
+"sDecimal"="."
+"sGrouping"="3;0"
+"sLanguage"="ENU"
+"sList"=","
+"sLongDate"="dddd, d MMMM, yyyy"
+"sMonDecimalSep"="."
+"sMonGrouping"="3;0"
+"sMonThousandSep"=","
+"sNativeDigits"="0123456789"
+"sNegativeSign"="-"
+"sPositiveSign"=""
+"sShortDate"="ddd, dd-MMM-yy"
+"sThousand"=","
+"sTime"=":"
+"sTimeFormat"="HH:mm:ss"
+"sShortTime"="HH:mm"
+"sYearMonth"="MMMM yyyy"
+"iCalendarType"="1"
+"iCountry"="1"
+"iCurrDigits"="2"
+"iCurrency"="0"
+"iDate"="1"
+"iDigits"="2"
+"NumShape"="1"
+"iFirstDayOfWeek"="6"
+"iFirstWeekOfYear"="0"
+"iLZero"="1"
+"iMeasure"="1"
+"iNegCurr"="0"
+"iNegNumber"="1"
+"iPaperSize"="1"
+"iTime"="1"
+"iTimePrefix"="0"
+"iTLZero"="1"
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\International\Geo]
+"Name"="US"
+"Nation"="244"
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\International\User Profile]
+"Languages"=hex(7):65,00,6e,00,2d,00,55,00,53,00,00,00,00,00
+"ShowAutoCorrection"=dword:00000000
+"ShowTextPrediction"=dword:00000000
+"ShowCasing"=dword:00000001
+"ShowShiftLock"=dword:00000001
+"UserLocaleFromLanguageProfileOptOut"=dword:00000001
+"HttpAcceptLanguageOptOut"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\International\User Profile\en-US]
+"0409:00000409"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Desktop
+"CursorBlinkRate"="300"
+
+[HKEY_LOCAL_MACHINE\mtUSER\Control Panel\Keyboard]
+"InitialKeyboardIndicators"="2"
+"KeyboardDelay"="1"
+"KeyboardSpeed"="31"
+
+; Disable_require_password_on_wakeup
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Power\PowerSettings\0e796bdb-100d-47d6-a2d5-f7d2daa51f51]
+"DCSettingIndex"=dword:00000000
+"ACSettingIndex"=dword:00000000
+
+; Disable_screen_saver_password_protection_for_all_users
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Policies\Microsoft\Windows\Control Panel\Desktop]
+"ScreenSaverIsSecure"="0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\Control Panel\Desktop]
+"ScreenSaverIsSecure"="0"
+
+; Disable Autocorrect and Highlight misspelled words
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\TabletTip\1.7]
+"EnableSpellchecking"=dword:00000000
+"EnableAutocorrection"=dword:00000000
+"EnableTextPrediction"=dword:00000000
+"EnablePredictionSpaceInsertion"=dword:00000000
+"EnableDoubleTapSpace"=dword:00000000
+"EnableEmbeddedInkControl"=dword:00000000
+"EnableInkingWithTouch"=dword:00000000
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Policies\Microsoft\Control Panel\International]
+"TurnOffAutocorrectMisspelledWords"=dword:00000001
+"TurnOffHighlightMisspelledWords"=dword:00000001
+[HKEY_LOCAL_MACHINE\mtUSER\Software\Microsoft\Input\Settings]
+"EnableHwkbAutocorrection"=dword:00000000
+"EnableHwkbAutocorrection2"=dword:00000000
+"EnableHwkbTextPrediction"=dword:00000000
+
+; Disable Network Indicator
+[HKEY_LOCAL_MACHINE\mtSOFT\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator]
+"NoActiveProbe"=dword:00000001
+"EnableActiveProbing"=dword:00000000
+"UseGlobalDNS"=dword:00000001
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\PolicyManager\default\Connectivity\DisallowNetworkConnectivityActiveTests]
+"value"=dword:00000001
+
+;Add Services to This PC Context Menu
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Servicemsc]
+"MUIVerb"="Services Manager"
+"HasLUAShield"=""
+"SuppressionPolicy"=dword:4000003c
+"Position"="Bottom"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Servicemsc\command]
+@="mmc.exe services.msc"
+
+;Add Device Manager to This PC Context Menu
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Devicemsc]
+"MUIVerb"="Devices Manager"
+"HasLUAShield"=""
+"SuppressionPolicy"=dword:4000003c
+"Position"="Bottom"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Devicemsc\command]
+@="mmc.exe devmgmt.msc"
+
+;Add Group Policy Editor To This PC Context Menu (Not Win 11 Home)
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Gpedit]
+"MUIVerb"="Group Policy Editor"
+"HasLUAShield"=""
+"SuppressionPolicy"=dword:4000003c
+"Position"="Bottom"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Gpedit\Command]
+@="mmc.exe gpedit.msc"
+
+;Add Event Viewer To This PC Context Menu
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Evtvwr]
+"MUIVerb"="Event Viewer"
+"Icon"=hex(2):25,00,53,00,79,00,73,00,74,00,65,00,6d,00,52,00,6f,00,6f,00,\
+  74,00,25,00,5c,00,53,00,79,00,73,00,74,00,65,00,6d,00,33,00,32,00,5c,00,65,\
+  00,76,00,65,00,6e,00,74,00,76,00,77,00,72,00,2e,00,65,00,78,00,65,00,2c,00,\
+  30,00,00,00
+"SuppressionPolicy"=dword:4000003c
+"Position"="Bottom"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\Evtvwr\Command]
+@="eventvwr.exe"
+
+; Remove Turn on BitLocker
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\encrypt-bde]
+"LegacyDisable"=""
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Drive\shell\encrypt-bde-elev]
+"LegacyDisable"=""
+
+; Remove Pin to
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Folder\shellex\ContextMenuHandlers\PintoStartScreen]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\exefile\shellex\ContextMenuHandlers\PintoStartScreen]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.Website\ShellEx\ContextMenuHandlers\PintoStartScreen]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\mscfile\shellex\ContextMenuHandlers\PintoStartScreen]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Folder\shell\pintohome]
+; do not remove Pin to taskbar
+;[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\*\shellex\ContextMenuHandlers\{90AA3A4E-1CBA-4233-B8BB-535773D48449}]
+
+; Remove Include in library
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Folder\ShellEx\ContextMenuHandlers\Library Location]
+
+;Network tweaking
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile]
+"NetworkThrottlingIndex"=dword:00000005
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\Tcpip\Parameters]
+"DisableTaskOffload"=dword:00000001
+"DefaultTTL"=dword:00000040
+"EnableDCA"=dword:00000001
+"EnableDeadGWDetect"=dword:00000001
+"EnableTCPA"=dword:00000001
+"EnableWSD"=dword:00000000
+"KeepAliveInterval"=dword:000007d0
+"KeepAliveTime"=dword:00493e0
+"MaxHashTableSize"=dword:0000ffdc
+"MaxUserPort"=dword:0000ffdc
+"StrictTimeWaitSeqCheck"=dword:00000001
+"SynAttackProtect"=dword:00000001
+"Tcp1323Opts"=dword:00000001
+"TcpMaxConnectResponseRetransmissions"=dword:00000003
+"TcpMaxDataRetransmissions"=dword:00000003
+"TcpTimedWaitDelay"=dword:0000001e
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\Tcpip\ServiceProvider]
+"LocalPriority"=dword:0000000a
+"HostsPriority"=dword:0000000b
+"DnsPriority"=dword:0000000c
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\MSMQ\Parameters]
+"TCPNoDelay"=dword:00000001
+
+[HKEY_LOCAL_MACHINE\mtSYS\ControlSet001\Services\Dnscache\Parameters]
+"MaxCacheTtl"=dword:00005460
+"MaxCacheEntryTtlLimit"=dword:00005460
+"MaxSOACacheEntryTtlLimit"=dword:00000005
+
+;RunAsTI
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\RunAsTI]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\RunAsTI]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\shell\RunAsTI]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\background\shell\RunAsTI]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\ExpAsTI]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\RegAsTI]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\batfile\shell\setdesktopwallpaper]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\cmdfile\shell\setdesktopwallpaper]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\exefile\shell\setdesktopwallpaper]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\mscfile\shell\setdesktopwallpaper]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.PowerShellScript.1\shell\setdesktopwallpaper]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\regfile\shell\setdesktopwallpaper]
+; [-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Folder\shell\setdesktopwallpaper]
+; [-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\background\shell\extract]
+
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\ExpAsTI]
+"MUIVerb"="Explorer as TI"
+"Icon"="explorer.exe,1"
+"HasLUAShield"=""
+;"AppliesTo"="NOT System.ParsingName:=\"::{645FF040-5081-101B-9F08-00AA002F954E}\""
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\ExpAsTI\Command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% explorer.exe \"%L\""
+;@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% explorer.exe \"1=%V\""
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\RegAsTI]
+"MUIVerb"="Regedit as TI"
+"Icon"="regedit.exe,0"
+"HasLUAShield"=""
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\RegAsTI\Command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% regedit.exe"
+;@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% regedit /s \"%L\""
+
+;On ThisPC
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{20D04FE0-3AEA-1069-A2D8-08002B30309D}\shell\RunAsTI]
+"SubCommands"="RegAsTI;ExpAsTI"
+"MUIVerb"="Run As TI"
+"Icon"="powershell.exe,1"
+"Position"="Bottom"
+
+;On Folder name
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\shell\RunAsTI]
+"SubCommands"="RegAsTI;ExpAsTI"
+"MUIVerb"="Run as TI"
+"Icon"="powershell.exe,1"
+"Position"="Bottom"
+
+;On Folder
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\background\shell\RunAsTI]
+"SubCommands"="RegAsTI;ExpAsTI"
+"MUIVerb"="Run as TI"
+"Icon"="powershell.exe,1"
+"Position"="Bottom"
+
+; RunAsTI on .bat
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\batfile\shell\setdesktopwallpaper]
+"MUIVerb"="Run as trustedinstaller"
+"HasLUAShield"=""
+"Icon"="powershell.exe,0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\batfile\shell\setdesktopwallpaper\command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% \"%L\""
+
+; RunAsTI on .cmd
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\cmdfile\shell\setdesktopwallpaper]
+"MUIVerb"="Run as trustedinstaller"
+"HasLUAShield"=""
+"Icon"="powershell.exe,0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\cmdfile\shell\setdesktopwallpaper\command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% \"%L\""
+
+; RunAsTI on .exe
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\exefile\shell\setdesktopwallpaper]
+"MUIVerb"="Run as trustedinstaller"
+"HasLUAShield"=""
+"Icon"="powershell.exe,0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\exefile\shell\setdesktopwallpaper\command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% \"%L\""
+
+; RunAsTI on .msc
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\mscfile\shell\setdesktopwallpaper]
+"MUIVerb"="Run as trustedinstaller"
+"HasLUAShield"=""
+"Icon"="powershell.exe,0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\mscfile\shell\setdesktopwallpaper\command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% \"%L\""
+
+; RunAsTI on .ps1
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.PowerShellScript.1\shell\setdesktopwallpaper]
+"MUIVerb"="Run as trustedinstaller"
+"HasLUAShield"=""
+"Icon"="powershell.exe,0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.PowerShellScript.1\shell\setdesktopwallpaper\command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% powershell -nop -c iex((gc -lit '%L')-join[char]10)"
+
+; RunAsTI on .reg
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\regfile\shell\setdesktopwallpaper]
+"MUIVerb"="Import as trustedinstaller"
+"HasLUAShield"=""
+"Icon"="powershell.exe,0"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\regfile\shell\setdesktopwallpaper\command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -win 1 -nop -c iex((10..40|%%{(gp 'Registry::HKCR\\RunAsTI' $_ -ea 0).$_})-join[char]10); # --%% regedit /s \"%L\""
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\RunAsTI]
+"10"="function RunAsTI ($cmd,$arg) { $id='RunAsTI'; $key=\"Registry::HKU\\$(((whoami /user)-split' ')[-1])\\Volatile Environment\"; $code=@'"
+"11"=" $I=[int32]; $M=$I.module.gettype(\"System.Runtime.Interop`Services.Mar`shal\"); $P=$I.module.gettype(\"System.Int`Ptr\"); $S=[string]"
+"12"=" $D=@(); $T=@(); $DM=[AppDomain]::CurrentDomain.\"DefineDynami`cAssembly\"(1,1).\"DefineDynami`cModule\"(1); $Z=[uintptr]::size "
+"13"=" 0..5|% {$D += $DM.\"Defin`eType\"(\"AveYo_$_\",1179913,[ValueType])}; $D += [uintptr]; 4..6|% {$D += $D[$_].\"MakeByR`efType\"()}"
+"14"=" $F='kernel','advapi','advapi', ($S,$S,$I,$I,$I,$I,$I,$S,$D[7],$D[8]), ([uintptr],$S,$I,$I,$D[9]),([uintptr],$S,$I,$I,[byte[]],$I)"
+"15"=" 0..2|% {$9=$D[0].\"DefinePInvok`eMethod\"(('CreateProcess','RegOpenKeyEx','RegSetValueEx')[$_],$F[$_]+'32',8214,1,$S,$F[$_+3],1,4)}"
+"16"=" $DF=($P,$I,$P),($I,$I,$I,$I,$P,$D[1]),($I,$S,$S,$S,$I,$I,$I,$I,$I,$I,$I,$I,[int16],[int16],$P,$P,$P,$P),($D[3],$P),($P,$P,$I,$I)"
+"17"=" 1..5|% {$k=$_; $n=1; $DF[$_-1]|% {$9=$D[$k].\"Defin`eField\"('f' + $n++, $_, 6)}}; 0..5|% {$T += $D[$_].\"Creat`eType\"()}"
+"18"=" 0..5|% {nv \"A$_\" ([Activator]::CreateInstance($T[$_])) -fo}; function F ($1,$2) {$T[0].\"G`etMethod\"($1).invoke(0,$2)}"
+"19"=" $TI=(whoami /groups)-like'*1-16-16384*'; $As=0; if(!$cmd) {$cmd='control';$arg='admintools'}; if ($cmd-eq'This PC'){$cmd='file:'}"
+"20"=" if (!$TI) {'TrustedInstaller','lsass','winlogon'|% {if (!$As) {$9=sc.exe start $_; $As=@(get-process -name $_ -ea 0|% {$_})[0]}}"
+"21"=" function M ($1,$2,$3) {$M.\"G`etMethod\"($1,[type[]]$2).invoke(0,$3)}; $H=@(); $Z,(4*$Z+16)|% {$H += M \"AllocHG`lobal\" $I $_}"
+"22"=" M \"WriteInt`Ptr\" ($P,$P) ($H[0],$As.Handle); $A1.f1=131072; $A1.f2=$Z; $A1.f3=$H[0]; $A2.f1=1; $A2.f2=1; $A2.f3=1; $A2.f4=1"
+"23"=" $A2.f6=$A1; $A3.f1=10*$Z+32; $A4.f1=$A3; $A4.f2=$H[1]; M \"StructureTo`Ptr\" ($D[2],$P,[boolean]) (($A2 -as $D[2]),$A4.f2,$false)"
+"24"=" $Run=@($null, \"powershell -win 1 -nop -c iex `$env:R; # $id\", 0, 0, 0, 0x0E080600, 0, $null, ($A4 -as $T[4]), ($A5 -as $T[5]))"
+"25"=" F 'CreateProcess' $Run; return}; $env:R=''; rp $key $id -force; $priv=[diagnostics.process].\"GetM`ember\"('SetPrivilege',42)[0]"
+"26"=" 'SeSecurityPrivilege','SeTakeOwnershipPrivilege','SeBackupPrivilege','SeRestorePrivilege' |% {$priv.Invoke($null, @(\"$_\",2))}"
+"27"=" $HKU=[uintptr][uint32]2147483651; $NT='S-1-5-18'; $reg=($HKU,$NT,8,2,($HKU -as $D[9])); F 'RegOpenKeyEx' $reg; $LNK=$reg[4]"
+"28"=" function L ($1,$2,$3) {sp 'Registry::HKCR\\AppID\\{CDCBCFCA-3CDC-436f-A4E2-0E02075250C2}' 'RunAs' $3 -force -ea 0"
+"29"="  $b=[Text.Encoding]::Unicode.GetBytes(\"\\Registry\\User\\$1\"); F 'RegSetValueEx' @($2,'SymbolicLinkValue',0,6,[byte[]]$b,$b.Length)}"
+"30"=" function Q {[int](gwmi win32_process -filter 'name=\"explorer.exe\"'|?{$_.getownersid().sid-eq$NT}|select -last 1).ProcessId}"
+"31"=" $env:wt='powershell'; dir \"$env:ProgramFiles\\WindowsApps\\Microsoft.WindowsTerminal*\\wt.exe\" -rec|% {$env:wt='\"'+$_.FullName+'\" \"-d .\"'}"
+"32"=" $11bug=($((gwmi Win32_OperatingSystem).BuildNumber)-eq'22000')-AND(($cmd-eq'file:')-OR(test-path -lit $cmd -PathType Container))"
+"33"=" if ($11bug) {'System.Windows.Forms','Microsoft.VisualBasic' |% {$9=[Reflection.Assembly]::LoadWithPartialName(\"'$_\")}}"
+"34"=" if ($11bug) {$path='^(l)'+$($cmd -replace '([\\+\\^\\%\\~\\(\\)\\[\\]])','{$1}')+'{ENTER}'; $cmd='control.exe'; $arg='admintools'}"
+"35"=" L ($key-split'\\\\')[1] $LNK ''; $R=[diagnostics.process]::start($cmd,$arg); if ($R) {$R.PriorityClass='High'; $R.WaitForExit()}"
+"36"=" if ($11bug) {$w=0; do {if($w-gt40){break}; sleep -mi 250;$w++} until (Q); [Microsoft.VisualBasic.Interaction]::AppActivate($(Q))}"
+"37"=" if ($11bug) {[Windows.Forms.SendKeys]::SendWait($path)}; do {sleep 7} while(Q); L '.Default' $LNK 'Interactive User'"
+"38"="'@; $V='';'cmd','arg','id','key'|%{$V+=\"`n`$$_='$($(gv $_ -val)-replace\"'\",\"''\")';\"}; sp $key $id $($V,$code) -type 7 -force -ea 0"
+"39"=" start powershell -args \"-win 1 -nop -c `n$V `$env:R=(gi `$key -ea 0).getvalue(`$id)-join''; iex `$env:R\" -verb runas"
+"40"="}; $A=,([environment]::commandline-split'-[-]%+ ?',2)[1]-split'\"([^\"]+)\"|([^ ]+)',2|%{$_.Trim(' \"')}; RunAsTI $A[1] $A[2]; # AveYo, 2023.07.06"
+;
+
+;CommandCom and Powershell Context Menu
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\shell\RunAsAdmin]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\background\shell\RunAsAdmin]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Classes\Drive\shell\RunAsAdmin]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\CmdAsAdmin]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\PsAsAdmin]
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\CmdAsAdmin]
+"MUIVerb"="CommandCom"
+"Icon"="cmd.exe,0"
+"HasLUAShield"=""
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\CmdAsAdmin\Command]
+@="cmd.exe /s /k pushd \"%V\""
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\PsAsAdmin]
+"MUIVerb"="PowerShell"
+"Icon"="powershell.exe,1"
+"HasLUAShield"=""
+[HKEY_LOCAL_MACHINE\mtSOFT\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\Shell\PsAsAdmin\Command]
+@="powershell.exe -NoP -Exec Bypass -NoExit -C \"Set-Location '%V'\""
+
+;On Folder name
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\shell\RunAsAdmin]
+"SubCommands"="CmdAsAdmin;PsAsAdmin"
+"MUIVerb"="Run as Administrators"
+"Icon"="control.exe,0"
+"Position"="Top"
+
+;On Folder
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Directory\background\shell\RunAsAdmin]
+"SubCommands"="CmdAsAdmin;PsAsAdmin"
+"MUIVerb"="Run as Administrators"
+"Icon"="control.exe,0"
+"Position"="Top"
+
+;On Drive
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Classes\Drive\shell\RunAsAdmin]
+"SubCommands"="CmdAsAdmin;PsAsAdmin"
+"MUIVerb"="Run as Administrators"
+"Icon"="control.exe,0"
+"Position"="Top"
+
+;Ps1 as administrators
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.PowerShellScript.1\Shell\runas]
+[-HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.PowerShellScript.1\Shell\PsAsAdmin]
+
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.PowerShellScript.1\Shell\PsAsAdmin]
+"HasLUAShield"=""
+"MUIVerb"="Run as Administrators"
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\Microsoft.PowerShellScript.1\Shell\PsAsAdmin\Command]
+@="powershell.exe -nop -ep bypass -c \"& '%1'\""
+;@="\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" \"-Command\" \"if((Get-ExecutionPolicy ) -ne 'AllSigned') { Set-ExecutionPolicy -Scope Process Bypass }; & '%1'\""
+
+;Classic Explore and ContextMenu
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{2aa9162e-c906-4dd9-ad0b-3d24a8eef5a0}\InProcServer32]
+@=""
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{6480100b-5a83-4d1e-9f69-8ae5a88e9a33}\InProcServer32]
+@=""
+[HKEY_LOCAL_MACHINE\mtSOFT\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InProcServer32]
+@=""
