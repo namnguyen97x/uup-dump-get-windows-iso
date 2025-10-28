@@ -24,25 +24,25 @@ $TARGETS = @{
     }
     # Windows Server 2025 - EnterpriseG supported
     "windows-server-2025" = @{
-        search = "window server 2025 26100 amd64" 
+        search = "Windows Server 2025 26100 amd64" 
         edition = "ServerStandard"
         virtualEdition = $null
     }
     # Windows 10 21H2 - EnterpriseG supported
     "windows-10" = @{
-        search = "window 10 19044 amd64" 
+        search = "Windows 10 19044 amd64" 
         edition = "Professional" #aka 21H2
         virtualEdition = $null
     }
     # Windows 10 20H2 - EnterpriseG supported
     "windows-10-20h2" = @{
-        search = "window 10 19041 amd64" 
+        search = "Windows 10 19041 amd64" 
         edition = "Professional" #aka 20H2
         virtualEdition = $null
     }
     # Windows 10 LTSC 2019 - EnterpriseG supported
     "windows-10-ltsc-2019" = @{
-        search = "window 10 17763 amd64" 
+        search = "Windows 10 17763 amd64" 
         edition = "Professional" #aka LTSC 2019
         virtualEdition = $null
     }
@@ -54,7 +54,7 @@ $TARGETS = @{
     }
     # Windows Server 2022 - EnterpriseG supported
     "windows-server-2022" = @{
-        search = "window server 2022 25398 amd64" 
+        search = "Windows Server 2022 25398 amd64" 
         edition = "ServerStandard"
         virtualEdition = $null
     }
@@ -145,7 +145,12 @@ function Get-UupDumpIso($name, $target) {
                     id = $id
                     lang = 'en-us'
                 }
-                $result.response.editionFancyNames
+                if ($result.response.editionFancyNames) {
+                    $result.response.editionFancyNames
+                } else {
+                    Write-Warning "No editions found for $name $id"
+                    [PSCustomObject]@{}
+                }
             } else {
                 Write-Host "Skipping. Expected langs=en-us. Got langs=$($langs -join ',')."
                 [PSCustomObject]@{}
@@ -162,7 +167,13 @@ function Get-UupDumpIso($name, $target) {
             #   3. match the requested edition
             $ring = $_.Value.info.ring
             $langs = $_.Value.langs.PSObject.Properties.Name
-            $editions = $_.Value.editions.PSObject.Properties.Name
+            $editions = if ($_.Value.editions -is [array]) {
+                $_.Value.editions
+            } elseif ($_.Value.editions.PSObject.Properties) {
+                $_.Value.editions.PSObject.Properties.Name
+            } else {
+                @()
+            }
             $result = $true
             $expectedRing = if ($target.PSObject.Properties.Name -contains 'ring') {
                 $target.ring
