@@ -295,6 +295,40 @@ jobs:
             exit 1
           }
 
+      - name: Validate EnterpriseG requirements
+        shell: pwsh
+        run: |
+          Write-Host "Validating EnterpriseG requirements..."
+          
+          # Check if build number is supported for EnterpriseG
+          $supportedBuilds = @("17763", "19041", "22000", "22621", "25398", "26100", "27729")
+          $buildNumber = "${{ steps.artifact-info.outputs.build }}"
+          
+          if ($buildNumber -notin $supportedBuilds) {
+            Write-Error "EnterpriseG only supports builds: $($supportedBuilds -join ', '). Current build: $buildNumber"
+            exit 1
+          }
+          
+          Write-Host "Build $buildNumber is supported for EnterpriseG"
+          
+          # EnterpriseG specific settings
+          Write-Host "EnterpriseG settings:"
+          Write-Host "  - Language: en-US only"
+          Write-Host "  - Microsoft Edge: Without (removed)"
+          Write-Host "  - Windows Defender: Without (removed)"
+          Write-Host "  - Product Key: YYVX9-NTFWV-6MDM3-9PT4T-4M68B"
+          
+          # Verify ISO file exists
+          $isoPath = "${{ github.workspace }}\Bedi\uup.iso"
+          if (-not (Test-Path $isoPath)) {
+            Write-Error "ISO file not found: $isoPath"
+            exit 1
+          }
+          
+          $isoInfo = Get-Item $isoPath
+          Write-Host "ISO file verified: $($isoInfo.FullName)"
+          Write-Host "ISO file size: $([math]::Round($isoInfo.Length / 1GB, 2)) GB"
+
       - name: Run Bedi CI wrapper
         shell: pwsh
         run: |
