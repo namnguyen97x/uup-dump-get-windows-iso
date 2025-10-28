@@ -112,13 +112,25 @@ jobs:
             Write-Warning "Could not list artifacts: $($_.Exception.Message)"
           }
 
+      - name: Debug workflow run info
+        shell: pwsh
+        run: |
+          Write-Host "Workflow run debug info:"
+          Write-Host "  Event name: ${{ github.event_name }}"
+          Write-Host "  Current run ID: ${{ github.run_id }}"
+          if ("${{ github.event_name }}" -eq "workflow_run") {
+            Write-Host "  Triggering workflow run ID: ${{ github.event.workflow_run.id }}"
+            Write-Host "  Triggering workflow name: ${{ github.event.workflow_run.name }}"
+            Write-Host "  Triggering workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
+          }
+
       - name: Download ISO from build artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ steps.artifact-info.outputs.name }}
           path: artifacts
           repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
 
       - name: Prepare ISO for Bedi
         shell: pwsh
