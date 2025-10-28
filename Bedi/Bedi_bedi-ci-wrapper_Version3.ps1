@@ -88,7 +88,30 @@ try {
       Write-Host "ESD exported to install.wim"
     }
   } else {
-    throw "Neither install.wim nor install.esd found in ISO's sources folder ($sources)."
+    # Provide detailed diagnostics about what's actually in the sources folder
+    Write-Host "ERROR: Neither install.wim nor install.esd found in ISO's sources folder ($sources)."
+    Write-Host "Checking what files are actually present in sources folder..."
+    
+    if (Test-Path $sources) {
+      $sourceFiles = Get-ChildItem -Path $sources -File | Select-Object Name, Length
+      Write-Host "Files found in sources folder:"
+      foreach ($file in $sourceFiles) {
+        Write-Host "  - $($file.Name) ($([math]::Round($file.Length/1MB, 2)) MB)"
+      }
+      
+      # Check for alternative installation file names
+      $altFiles = @('install.swm', 'install2.swm', 'install3.swm', 'install4.swm', 'boot.wim')
+      foreach ($altFile in $altFiles) {
+        $altPath = Join-Path $sources $altFile
+        if (Test-Path $altPath) {
+          Write-Host "  Found alternative file: $altFile"
+        }
+      }
+    } else {
+      Write-Host "Sources folder does not exist at: $sources"
+    }
+    
+    throw "UUP ISO appears to be incomplete or corrupted. Expected install.wim or install.esd in sources folder but found none."
   }
 
   # Copy clients.esd if present
