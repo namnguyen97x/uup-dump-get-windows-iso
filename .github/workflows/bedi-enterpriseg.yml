@@ -135,29 +135,16 @@ jobs:
                 'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
                 'Accept' = 'application/vnd.github+json'
               }
-              $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/runs?status=success&per_page=10" -Headers $headers
               
-              $foundRun = $null
-              foreach ($run in $response.workflow_runs) {
-                Write-Host "Checking run: $($run.id) - $($run.head_commit.message)"
-                try {
-                  $artifactsResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs/$($run.id)/artifacts" -Headers $headers
-                  $hasWindows11 = $artifactsResponse.artifacts | Where-Object { $_.name -eq "windows-11" -and -not $_.expired }
-                  if ($hasWindows11) {
-                    $foundRun = $run
-                    Write-Host "Found run with windows-11 artifact: $($run.id)"
-                    break
-                  }
-                } catch {
-                  Write-Host "Could not check artifacts for run $($run.id): $($_.Exception.Message)"
-                }
-              }
+              # Get the latest successful build run
+              $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/runs?status=success&per_page=5" -Headers $headers
               
-              if ($foundRun) {
-                Write-Output "run_id=$($foundRun.id)" >> $env:GITHUB_OUTPUT
-                Write-Host "Using run with windows-11: $($foundRun.id) - $($foundRun.head_commit.message)"
+              if ($response.workflow_runs.Count -gt 0) {
+                $latestRun = $response.workflow_runs[0]
+                Write-Output "run_id=$($latestRun.id)" >> $env:GITHUB_OUTPUT
+                Write-Host "Using latest build run: $($latestRun.id) - $($latestRun.head_commit.message)"
               } else {
-                Write-Warning "No successful build runs with windows-11 artifact found"
+                Write-Warning "No successful build runs found"
                 Write-Output "run_id=" >> $env:GITHUB_OUTPUT
               }
             } catch {
@@ -198,6 +185,16 @@ jobs:
           path: artifacts
           repository: ${{ github.repository }}
           run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || steps.find-run.outputs.run_id }}
+        continue-on-error: true
+        id: download-artifact
+
+      - name: Download ISO from repository-wide (fallback)
+        if: steps.download-artifact.outcome == 'failure'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.artifact-info.outputs.name }}
+          path: artifacts
+          repository: ${{ github.repository }}
 
       - name: Prepare ISO for Bedi
         shell: pwsh
