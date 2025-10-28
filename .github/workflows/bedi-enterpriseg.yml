@@ -14,10 +14,10 @@ on:
         description: 'WIM/ESD image index to use (1 for typical single-index images)'
         required: true
         default: '1'
-      target:
-        description: 'Target SKU for Bedi (EnterpriseG)'
-        required: true
-        default: 'EnterpriseG'
+      run_id:
+        description: 'Run ID of build workflow to download artifact from (leave empty for auto-detect)'
+        required: false
+        default: ''
   workflow_run:
     workflows: ["build"]
     types: [completed]
@@ -124,13 +124,42 @@ jobs:
             Write-Host "  Triggering workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
           }
 
+      - name: Find latest build workflow run
+        id: find-run
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and [string]::IsNullOrEmpty("${{ github.event.inputs.run_id }}")) {
+            Write-Host "Finding latest successful build workflow run..."
+            try {
+              $headers = @{
+                'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+                'Accept' = 'application/vnd.github+json'
+              }
+              $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/runs?status=success&per_page=5" -Headers $headers
+              
+              if ($response.workflow_runs.Count -gt 0) {
+                $latestRun = $response.workflow_runs[0]
+                Write-Output "run_id=$($latestRun.id)" >> $env:GITHUB_OUTPUT
+                Write-Host "Found latest build run: $($latestRun.id) - $($latestRun.head_commit.message)"
+              } else {
+                Write-Warning "No successful build runs found"
+                Write-Output "run_id=" >> $env:GITHUB_OUTPUT
+              }
+            } catch {
+              Write-Warning "Could not find build runs: $($_.Exception.Message)"
+              Write-Output "run_id=" >> $env:GITHUB_OUTPUT
+            }
+          } else {
+            Write-Output "run_id=${{ github.event.inputs.run_id }}" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Download ISO from build artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ steps.artifact-info.outputs.name }}
           path: artifacts
           repository: ${{ github.repository }}
-          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || steps.find-run.outputs.run_id }}
 
       - name: Prepare ISO for Bedi
         shell: pwsh
