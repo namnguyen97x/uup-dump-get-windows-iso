@@ -145,7 +145,13 @@ function Get-UupDumpIso($name, $target) {
                 langs = $result.response.langFancyNames
                 info = $result.response.updateInfo
             }
-            $langs = $_.Value.langs.PSObject.Properties.Name
+            $langs = if ($_.Value.langs -is [array]) {
+                $_.Value.langs
+            } elseif ($_.Value.langs.PSObject.Properties) {
+                $_.Value.langs.PSObject.Properties.Name
+            } else {
+                @()
+            }
             $editions = if ($langs -contains 'en-us') {
                 Write-Host "Getting the $name $id editions metadata"
                 $result = Invoke-UupDumpApi listeditions @{
@@ -173,7 +179,13 @@ function Get-UupDumpIso($name, $target) {
             #   2. have the english language
             #   3. match the requested edition
             $ring = $_.Value.info.ring
-            $langs = $_.Value.langs.PSObject.Properties.Name
+            $langs = if ($_.Value.langs -is [array]) {
+                $_.Value.langs
+            } elseif ($_.Value.langs.PSObject.Properties) {
+                $_.Value.langs.PSObject.Properties.Name
+            } else {
+                @()
+            }
             $editions = if ($_.Value.editions -is [array]) {
                 $_.Value.editions
             } elseif ($_.Value.editions.PSObject.Properties) {
