@@ -178,21 +178,56 @@ jobs:
             }
           }
 
-      - name: Download ISO from build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.artifact-info.outputs.name }}
-          path: artifacts
-          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || steps.find-run.outputs.run_id }}
-        continue-on-error: true
-        id: download-artifact
-
-      - name: Download ISO from repository-wide (fallback)
-        if: steps.download-artifact.outcome == 'failure'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.artifact-info.outputs.name }}
-          path: artifacts
+      - name: Download artifact using GitHub API
+        shell: pwsh
+        run: |
+          $artifactName = "${{ steps.artifact-info.outputs.name }}"
+          $runId = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || steps.find-run.outputs.run_id }}"
+          
+          Write-Host "Downloading artifact '$artifactName' from run '$runId'"
+          
+          # Create artifacts directory
+          if (-not (Test-Path -Path "artifacts")) {
+            New-Item -ItemType Directory -Path "artifacts" | Out-Null
+          }
+          
+          try {
+            $headers = @{
+              'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+              'Accept' = 'application/vnd.github+json'
+            }
+            
+            # Get artifact download URL
+            $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs/$runId/artifacts" -Headers $headers
+            $artifact = $response.artifacts | Where-Object { $_.name -eq $artifactName -and -not $_.expired }
+            
+            if ($artifact) {
+              Write-Host "Found artifact: $($artifact.name) (Size: $($artifact.size_in_bytes) bytes)"
+              
+              # Get download URL
+              $downloadResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$($artifact.id)/zip" -Headers $headers -Method Head
+              $downloadUrl = $downloadResponse.Headers.Location
+              
+              if ($downloadUrl) {
+                Write-Host "Downloading from: $downloadUrl"
+                Invoke-WebRequest -Uri $downloadUrl -OutFile "artifacts\$artifactName.zip"
+                Write-Host "Download completed successfully"
+                
+                # Extract the zip file
+                Expand-Archive -Path "artifacts\$artifactName.zip" -DestinationPath "artifacts" -Force
+                Write-Host "Extraction completed"
+              } else {
+                Write-Error "Could not get download URL for artifact"
+                exit 1
+              }
+            } else {
+              Write-Error "Artifact '$artifactName' not found in run '$runId' or expired"
+              exit 1
+            }
+          } catch {
+            Write-Error "Failed to download artifact: $($_.Exception.Message)"
+            exit 1
+          }
 
       - name: Prepare ISO for Bedi
         shell: pwsh
