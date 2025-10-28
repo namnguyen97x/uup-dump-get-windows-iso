@@ -64,6 +64,10 @@ if (-not $driveRoot -or $driveRoot -eq '') {
   throw "Could not determine mounted drive letter. Please mount the ISO manually and provide the drive letter."
 }
 $driveLetter = $driveRoot.TrimEnd('\')
+# Normalize to root path like 'E:\' to ensure Join-Path builds absolute paths
+if ($driveLetter.Length -eq 1 -and $driveLetter -match '^[A-Za-z]$') {
+  $driveLetter = "$driveLetter:\"
+}
 Write-Host "ISO mounted at $driveLetter"
 
 try {
