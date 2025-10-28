@@ -240,11 +240,48 @@ jobs:
       - name: Prepare ISO for Bedi
         shell: pwsh
         run: |
-          # Find the ISO file in artifacts
-          $isoFile = Get-ChildItem -Path "artifacts" -Filter "*.iso" | Select-Object -First 1
+          # Find the ISO file recursively in artifacts (may be in subdirectory)
+          $isoFile = Get-ChildItem -Path "artifacts" -Filter "*.iso" -Recurse | Select-Object -First 1
           if (-not $isoFile) {
             Write-Error "No ISO file found in artifacts. Check artifact name: ${{ steps.artifact-info.outputs.name }}"
+            Write-Host "Contents of artifacts directory:"
+            Get-ChildItem -Path "artifacts" -Recurse | ForEach-Object { Write-Host "  $($_.FullName)" }
             exit 1
+          }
+          
+          Write-Host "Found ISO file: $($isoFile.FullName)"
+          Write-Host "ISO size: $([math]::Round($isoFile.Length / 1GB, 2)) GB"
+          
+          # Pre-validate ISO structure before copying
+          Write-Host "Pre-validating ISO structure..."
+          $img = Mount-DiskImage $isoFile.FullName -PassThru
+          try {
+            $vol = $img | Get-Volume
+            $root = "$($vol.DriveLetter):\"
+            Write-Host "ISO mounted at: $root"
+            
+            # Check for sources folder
+            $sourcesPath = Join-Path $root 'sources'
+            if (-not (Test-Path $sourcesPath)) {
+              Write-Error "Invalid ISO: missing 'sources' folder"
+              Write-Host "Root directory contents:"
+              Get-ChildItem $root | ForEach-Object { Write-Host "  $($_.Name)" }
+              exit 1
+            }
+            
+            # Check for install files
+            $installWim = Join-Path $sourcesPath 'install.wim'
+            $installEsd = Join-Path $sourcesPath 'install.esd'
+            if (-not (Test-Path $installWim) -and -not (Test-Path $installEsd)) {
+              Write-Error "Invalid ISO: missing install.wim/esd in 'sources'"
+              Write-Host "Sources directory contents:"
+              Get-ChildItem $sourcesPath | ForEach-Object { Write-Host "  $($_.Name)" }
+              exit 1
+            }
+            
+            Write-Host "ISO validation passed - contains valid Windows installation files"
+          } finally {
+            Dismount-DiskImage -ImagePath $isoFile.FullName | Out-Null
           }
           
           # Ensure Bedi directory exists
@@ -259,10 +296,9 @@ jobs:
           $targetIso = Join-Path "${{ github.workspace }}\Bedi" "uup.iso"
           Copy-Item -Path $isoFile.FullName -Destination $targetIso -Force
           Write-Host "ISO copied to: $targetIso"
-          Write-Host "ISO size: $((Get-Item $targetIso).Length / 1GB) GB"
           
           # Show artifact info
-          $jsonFile = Get-ChildItem -Path "artifacts" -Filter "*.json" | Select-Object -First 1
+          $jsonFile = Get-ChildItem -Path "artifacts" -Filter "*.json" -Recurse | Select-Object -First 1
           if ($jsonFile) {
             $buildInfo = Get-Content $jsonFile.FullName | ConvertFrom-Json
             Write-Host "Build Info:"
