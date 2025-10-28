@@ -204,9 +204,8 @@ jobs:
             if ($artifact) {
               Write-Host "Found artifact: $($artifact.name) (Size: $($artifact.size_in_bytes) bytes)"
               
-              # Get download URL
-              $downloadResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$($artifact.id)/zip" -Headers $headers -Method Head
-              $downloadUrl = $downloadResponse.Headers.Location
+              # Get download URL - use the artifact's archive_download_url
+              $downloadUrl = $artifact.archive_download_url
               
               if ($downloadUrl) {
                 Write-Host "Downloading from: $downloadUrl"
