@@ -47,12 +47,6 @@ $TARGETS = @{
         edition = "Professional" #aka LTSC 2019
         virtualEdition = $null
     }
-    # Windows 11 21H2 - EnterpriseG supported (REMOVED due to API issues)
-    # "windows-11-21h2" = @{
-    #     search = "Windows 11 22000 amd64" # aka 21H2
-    #     edition = "Professional"
-    #     virtualEdition = $null
-    # }
     # Windows Server 2022 - EnterpriseG supported
     "windows-server-2022" = @{
         search = "Windows Server 2022 25398 amd64" 
