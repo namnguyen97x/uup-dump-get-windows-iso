@@ -183,7 +183,6 @@ jobs:
         with:
           name: ${{ steps.artifact-info.outputs.name }}
           path: artifacts
-          repository: ${{ github.repository }}
           run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || steps.find-run.outputs.run_id }}
         continue-on-error: true
         id: download-artifact
@@ -194,7 +193,6 @@ jobs:
         with:
           name: ${{ steps.artifact-info.outputs.name }}
           path: artifacts
-          repository: ${{ github.repository }}
 
       - name: Prepare ISO for Bedi
         shell: pwsh
