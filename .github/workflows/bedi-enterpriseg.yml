@@ -3,13 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       artifact_name:
-        description: 'Artifact name from build workflow (e.g. 22621, 22000) - leave empty to use latest'
+        description: 'Artifact name from build workflow (e.g. windows-11, windows-10, windows-server-2025) - leave empty to use latest'
         required: false
         default: ''
       build:
-        description: 'Build number folder to create/use (e.g. 22000)'
+        description: 'Build number folder to create/use (e.g. 22631) - used for Bedi folder structure'
         required: true
-        default: '22000'
+        default: '22631'
       wim_index:
         description: 'WIM/ESD image index to use (1 for typical single-index images)'
         required: true
@@ -33,15 +33,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Determine artifact name
-        id: artifact-name
+      - name: Determine artifact name and build number
+        id: artifact-info
         shell: pwsh
         run: |
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             $artifactName = "${{ github.event.inputs.artifact_name }}"
             if ([string]::IsNullOrEmpty($artifactName)) {
-              $artifactName = "${{ github.event.inputs.build }}"
+              $artifactName = "windows-11"  # Default to windows-11
             }
+            $buildNumber = "${{ github.event.inputs.build }}"
           } else {
             # For workflow_run trigger, try to find available artifacts
             Write-Host "Attempting to find available artifacts..."
@@ -75,9 +76,21 @@ jobs:
               Write-Warning "No available artifacts found. Using default: windows-11"
               $artifactName = "windows-11"
             }
+            
+            # Auto-detect build number from artifact name
+            $buildNumber = switch ($artifactName) {
+              "windows-11" { "22621" }
+              "windows-10" { "19041" }
+              "windows-server-2025" { "25398" }
+              default { "22621" }
+            }
+            Write-Host "Auto-detected build number: $buildNumber for artifact: $artifactName"
           }
+          
           Write-Output "name=$artifactName" >> $env:GITHUB_OUTPUT
+          Write-Output "build=$buildNumber" >> $env:GITHUB_OUTPUT
           Write-Host "Using artifact name: $artifactName"
+          Write-Host "Using build number: $buildNumber"
 
       - name: List available artifacts (debug)
         shell: pwsh
@@ -102,10 +115,10 @@ jobs:
       - name: Download ISO from build artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ steps.artifact-name.outputs.name }}
+          name: ${{ steps.artifact-info.outputs.name }}
           path: artifacts
           repository: ${{ github.repository }}
-          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Prepare ISO for Bedi
         shell: pwsh
@@ -113,7 +126,7 @@ jobs:
           # Find the ISO file in artifacts
           $isoFile = Get-ChildItem -Path "artifacts" -Filter "*.iso" | Select-Object -First 1
           if (-not $isoFile) {
-            Write-Error "No ISO file found in artifacts. Check artifact name: ${{ steps.artifact-name.outputs.name }}"
+            Write-Error "No ISO file found in artifacts. Check artifact name: ${{ steps.artifact-info.outputs.name }}"
             exit 1
           }
           
@@ -173,12 +186,12 @@ jobs:
             Write-Error "Wrapper script not found: $script. Ensure Bedi/Bedi_bedi-ci-wrapper_Version3.ps1 exists in the repo."
             exit 1
           }
-          & powershell -ExecutionPolicy Bypass -NoProfile -File $script -IsoPath "Bedi\uup.iso" -Build "${{ github.event.inputs.build }}" -WimIndex "${{ github.event.inputs.wim_index }}" -TargetSKU "${{ github.event.inputs.target }}"
+          & powershell -ExecutionPolicy Bypass -NoProfile -File $script -IsoPath "Bedi\uup.iso" -Build "${{ steps.artifact-info.outputs.build }}" -WimIndex "${{ github.event.inputs.wim_index }}" -TargetSKU "${{ github.event.inputs.target }}"
 
       - name: Upload build artifacts (WIM/ESD/logs)
         uses: actions/upload-artifact@v4
         with:
-          name: bedi-output-${{ github.event.inputs.build }}
+          name: bedi-output-${{ steps.artifact-info.outputs.build }}
           path: |
             Bedi\*.wim
             Bedi\*.esd
