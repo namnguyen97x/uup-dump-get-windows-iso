@@ -45,18 +45,25 @@ Mount-DiskImage -ImagePath $isoResolved -PassThru | Out-Null
 Start-Sleep -Seconds 1
 $after = (Get-PSDrive -PSProvider FileSystem).Root
 $news = Compare-Object -ReferenceObject $before -DifferenceObject $after | Where-Object { $_.SideIndicator -eq '=>' } | Select-Object -ExpandProperty InputObject
-if (-not $news) {
-  Write-Warning "Could not detect new drive letter automatically. You may need to mount ISO manually. Continuing assuming $isoResolved is accessible."
-  $driveRoot = ($after | Where-Object { $_ -notin $before } | Select-Object -First 1)
+
+# Determine drive root with robust string handling
+if ($news -and $news.Count -gt 0) {
+  $driveRoot = [string]$news[0]
 } else {
-  $driveRoot = $news[0]
+  Write-Warning "Could not detect new drive letter automatically. You may need to mount ISO manually. Continuing assuming $isoResolved is accessible."
+  $newDrives = $after | Where-Object { $_ -notin $before }
+  if ($newDrives -and $newDrives.Count -gt 0) {
+    $driveRoot = [string]$newDrives[0]
+  } else {
+    throw "Could not determine mounted drive letter. Please mount the ISO manually and provide the drive letter."
+  }
 }
 
-# Ensure driveRoot is a string and handle edge cases
-if (-not $driveRoot) {
+# Ensure driveRoot is a valid string and trim trailing backslash
+if (-not $driveRoot -or $driveRoot -eq '') {
   throw "Could not determine mounted drive letter. Please mount the ISO manually and provide the drive letter."
 }
-$driveLetter = [string]$driveRoot.TrimEnd('\')
+$driveLetter = $driveRoot.TrimEnd('\')
 Write-Host "ISO mounted at $driveLetter"
 
 try {
