@@ -41,12 +41,6 @@ $TARGETS = @{
         edition = "Professional" #aka 21H2
         virtualEdition = $null
     }
-    # Windows 10 20H2 - EnterpriseG supported (REMOVED due to API issues)
-    # "windows-10-20h2" = @{
-    #     search = "Windows 10 19041 amd64" 
-    #     edition = "Professional" #aka 20H2
-    #     virtualEdition = $null
-    # }
     # Windows 10 LTSC 2019 - EnterpriseG supported
     "windows-10-ltsc-2019" = @{
         search = "Windows 10 17763 amd64" 
