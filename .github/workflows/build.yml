@@ -73,6 +73,7 @@ jobs:
             exit 1
           }
   build:
+    if: ${{ fromJson(needs.setup.outputs.matrix) != '[]' }}
     strategy:
       matrix:
         include: ${{ fromJson(needs.setup.outputs.matrix) }}
