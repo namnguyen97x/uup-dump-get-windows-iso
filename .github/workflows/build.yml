@@ -37,10 +37,37 @@ jobs:
             }
             
             $targetsSection = $scriptContent.Substring($startPos, $endPos - $startPos)
-            $targetNames = [regex]::Matches($targetsSection, '"([^"]+)"\s*=') | ForEach-Object { $_.Groups[1].Value }
-            $matrix = $targetNames | ForEach-Object { @{ name = $_ } } | ConvertTo-Json -Compress
+            
+            # Split into lines and filter out commented lines
+            $lines = $targetsSection -split '\r?\n'
+            $activeTargets = @()
+            
+            foreach ($line in $lines) {
+              $trimmedLine = $line.Trim()
+              # Skip empty lines and comments
+              if ($trimmedLine -eq '' -or $trimmedLine.StartsWith('#')) {
+                continue
+              }
+              
+              # Look for target name pattern: "target-name" = @{
+              $targetMatch = [regex]::Match($trimmedLine, '"([^"]+)"\s*=\s*@\s*\{')
+              if ($targetMatch.Success) {
+                $targetName = $targetMatch.Groups[1].Value
+                $activeTargets += $targetName
+                Write-Host "Found active target: $targetName"
+              }
+            }
+            
+            if ($activeTargets.Count -eq 0) {
+              Write-Warning "No active targets found in TARGETS configuration"
+              $matrix = '[]'
+            } else {
+              $matrix = $activeTargets | ForEach-Object { @{ name = $_ } } | ConvertTo-Json -Compress
+            }
+            
             Write-Output "matrix=$matrix" >> $env:GITHUB_OUTPUT
             Write-Host "Extracted matrix: $matrix"
+            Write-Host "Active targets: $($activeTargets -join ', ')"
           } else {
             Write-Error "Could not find TARGETS configuration in PowerShell script"
             exit 1
