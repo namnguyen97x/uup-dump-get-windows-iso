@@ -135,14 +135,29 @@ jobs:
                 'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
                 'Accept' = 'application/vnd.github+json'
               }
-              $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/runs?status=success&per_page=5" -Headers $headers
+              $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/runs?status=success&per_page=10" -Headers $headers
               
-              if ($response.workflow_runs.Count -gt 0) {
-                $latestRun = $response.workflow_runs[0]
-                Write-Output "run_id=$($latestRun.id)" >> $env:GITHUB_OUTPUT
-                Write-Host "Found latest build run: $($latestRun.id) - $($latestRun.head_commit.message)"
+              $foundRun = $null
+              foreach ($run in $response.workflow_runs) {
+                Write-Host "Checking run: $($run.id) - $($run.head_commit.message)"
+                try {
+                  $artifactsResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs/$($run.id)/artifacts" -Headers $headers
+                  $hasWindows11 = $artifactsResponse.artifacts | Where-Object { $_.name -eq "windows-11" -and -not $_.expired }
+                  if ($hasWindows11) {
+                    $foundRun = $run
+                    Write-Host "Found run with windows-11 artifact: $($run.id)"
+                    break
+                  }
+                } catch {
+                  Write-Host "Could not check artifacts for run $($run.id): $($_.Exception.Message)"
+                }
+              }
+              
+              if ($foundRun) {
+                Write-Output "run_id=$($foundRun.id)" >> $env:GITHUB_OUTPUT
+                Write-Host "Using run with windows-11: $($foundRun.id) - $($foundRun.head_commit.message)"
               } else {
-                Write-Warning "No successful build runs found"
+                Write-Warning "No successful build runs with windows-11 artifact found"
                 Write-Output "run_id=" >> $env:GITHUB_OUTPUT
               }
             } catch {
@@ -151,6 +166,29 @@ jobs:
             }
           } else {
             Write-Output "run_id=${{ github.event.inputs.run_id }}" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Check artifacts in specific run
+        shell: pwsh
+        run: |
+          $runId = "${{ steps.find-run.outputs.run_id }}"
+          if (-not [string]::IsNullOrEmpty($runId)) {
+            Write-Host "Checking artifacts in run: $runId"
+            try {
+              $headers = @{
+                'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+                'Accept' = 'application/vnd.github+json'
+              }
+              $response = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs/$runId/artifacts" -Headers $headers
+              
+              Write-Host "Artifacts in run $runId :"
+              foreach ($artifact in $response.artifacts) {
+                $status = if ($artifact.expired) { "EXPIRED" } else { "AVAILABLE" }
+                Write-Host "  - $($artifact.name) ($status) - Size: $($artifact.size_in_bytes) bytes"
+              }
+            } catch {
+              Write-Warning "Could not check artifacts in run $runId : $($_.Exception.Message)"
+            }
           }
 
       - name: Download ISO from build artifact
