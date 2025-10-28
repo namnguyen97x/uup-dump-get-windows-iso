@@ -60,7 +60,8 @@ jobs:
             
             if ($activeTargets.Count -eq 0) {
               Write-Warning "No active targets found in TARGETS configuration"
-              $matrix = '[]'
+              # Return a dummy target to prevent YAML syntax error
+              $matrix = '[{"name":"no-targets"}]'
             } else {
               $matrix = $activeTargets | ForEach-Object { @{ name = $_ } } | ConvertTo-Json -Compress
             }
@@ -73,7 +74,6 @@ jobs:
             exit 1
           }
   build:
-    if: ${{ fromJson(needs.setup.outputs.matrix) != '[]' }}
     strategy:
       matrix:
         include: ${{ fromJson(needs.setup.outputs.matrix) }}
@@ -85,10 +85,13 @@ jobs:
       - name: Show available disk space before build
         run: Get-PSDrive -PSProvider FileSystem
       - name: Build
+        if: ${{ matrix.name != 'no-targets' }}
         run: pwsh uup-dump-get-windows-iso.ps1 ${{ matrix.name }} c:/output
       - name: Show available disk space after build
+        if: ${{ matrix.name != 'no-targets' }}
         run: Get-PSDrive -PSProvider FileSystem
       - name: Build summary
+        if: ${{ matrix.name != 'no-targets' }}
         run: |
           $iso = Get-Content (Resolve-Path c:/output/*.json) | ConvertFrom-Json
           Add-Content $env:GITHUB_STEP_SUMMARY @"
@@ -101,6 +104,7 @@ jobs:
           | UUP dump | [$($iso.title)]($($iso.uupDump.downloadUrl)) |
           "@
       - name: Upload artifact
+        if: ${{ matrix.name != 'no-targets' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
