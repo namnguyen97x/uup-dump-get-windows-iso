@@ -303,7 +303,7 @@ jobs:
             Write-Error "Wrapper script not found: $script. Ensure Bedi/Bedi_bedi-ci-wrapper_Version3.ps1 exists in the repo."
             exit 1
           }
-          & powershell -ExecutionPolicy Bypass -NoProfile -File $script -IsoPath "Bedi\uup.iso" -Build "${{ steps.artifact-info.outputs.build }}" -WimIndex "${{ github.event.inputs.wim_index }}" -TargetSKU "${{ github.event.inputs.target }}"
+          & powershell -ExecutionPolicy Bypass -NoProfile -File $script -IsoPath "${{ github.workspace }}\Bedi\uup.iso" -Build "${{ steps.artifact-info.outputs.build }}" -WimIndex "${{ github.event.inputs.wim_index }}" -TargetSKU "EnterpriseG"
 
       - name: Upload build artifacts (WIM/ESD/logs)
         uses: actions/upload-artifact@v4
