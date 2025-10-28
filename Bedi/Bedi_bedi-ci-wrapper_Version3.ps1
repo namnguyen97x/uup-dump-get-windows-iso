@@ -51,7 +51,12 @@ if (-not $news) {
 } else {
   $driveRoot = $news[0]
 }
-$driveLetter = $driveRoot.TrimEnd('\')
+
+# Ensure driveRoot is a string and handle edge cases
+if (-not $driveRoot) {
+  throw "Could not determine mounted drive letter. Please mount the ISO manually and provide the drive letter."
+}
+$driveLetter = [string]$driveRoot.TrimEnd('\')
 Write-Host "ISO mounted at $driveLetter"
 
 try {
