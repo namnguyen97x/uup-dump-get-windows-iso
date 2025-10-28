@@ -22,43 +22,42 @@ $TARGETS = @{
         edition = "Professional"
         virtualEdition = $null
     }
-    # Commented out for testing - only Windows 11 enabled
     # Windows Server 2025 - EnterpriseG supported
-    # "windows-server-2025" = @{
-    #     search = "window server 2025 26100 amd64" 
-    #     edition = "ServerStandard"
-    #     virtualEdition = $null
-    # }
+    "windows-server-2025" = @{
+        search = "window server 2025 26100 amd64" 
+        edition = "ServerStandard"
+        virtualEdition = $null
+    }
     # Windows 10 21H2 - EnterpriseG supported
-    # "windows-10" = @{
-    #     search = "window 10 19044 amd64" 
-    #     edition = "Professional" #aka 21H2
-    #     virtualEdition = $null
-    # }
+    "windows-10" = @{
+        search = "window 10 19044 amd64" 
+        edition = "Professional" #aka 21H2
+        virtualEdition = $null
+    }
     # Windows 10 20H2 - EnterpriseG supported
-    # "windows-10-20h2" = @{
-    #     search = "window 10 19041 amd64" 
-    #     edition = "Professional" #aka 20H2
-    #     virtualEdition = $null
-    # }
+    "windows-10-20h2" = @{
+        search = "window 10 19041 amd64" 
+        edition = "Professional" #aka 20H2
+        virtualEdition = $null
+    }
     # Windows 10 LTSC 2019 - EnterpriseG supported
-    # "windows-10-ltsc-2019" = @{
-    #     search = "window 10 17763 amd64" 
-    #     edition = "Professional" #aka LTSC 2019
-    #     virtualEdition = $null
-    # }
+    "windows-10-ltsc-2019" = @{
+        search = "window 10 17763 amd64" 
+        edition = "Professional" #aka LTSC 2019
+        virtualEdition = $null
+    }
     # Windows 11 21H2 - EnterpriseG supported
-    # "windows-11-21h2" = @{
-    #     search = "Windows 11 22000 amd64" # aka 21H2
-    #     edition = "Professional"
-    #     virtualEdition = $null
-    # }
+    "windows-11-21h2" = @{
+        search = "Windows 11 22000 amd64" # aka 21H2
+        edition = "Professional"
+        virtualEdition = $null
+    }
     # Windows Server 2022 - EnterpriseG supported
-    # "windows-server-2022" = @{
-    #     search = "window server 2022 25398 amd64" 
-    #     edition = "ServerStandard"
-    #     virtualEdition = $null
-    # }
+    "windows-server-2022" = @{
+        search = "window server 2022 25398 amd64" 
+        edition = "ServerStandard"
+        virtualEdition = $null
+    }
 }
 
 function New-QueryString([hashtable]$parameters) {
