@@ -72,6 +72,27 @@ try {
   $installEsdOnIso = Join-Path $sources 'install.esd'
   $installWimOnIso = Join-Path $sources 'install.wim'
 
+  # Validate ISO structure before processing
+  Write-Host "Validating ISO structure..."
+  if (-not (Test-Path $sources)) {
+    throw "Sources folder not found at: $sources. This indicates the ISO is not a valid Windows installation ISO."
+  }
+  
+  # Check for basic Windows ISO structure
+  $requiredFiles = @('boot.wim')
+  $missingFiles = @()
+  foreach ($file in $requiredFiles) {
+    $filePath = Join-Path $sources $file
+    if (-not (Test-Path $filePath)) {
+      $missingFiles += $file
+    }
+  }
+  
+  if ($missingFiles.Count -gt 0) {
+    Write-Warning "Missing required Windows ISO files: $($missingFiles -join ', ')"
+    Write-Warning "This may indicate the UUP conversion process failed or the ISO is corrupted."
+  }
+
   if (Test-Path $installWimOnIso) {
     Write-Host "Found install.wim on ISO. Copying to Bedi root..."
     Copy-Item -Path $installWimOnIso -Destination $installWim -Force
