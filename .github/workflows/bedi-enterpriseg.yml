@@ -77,12 +77,12 @@ jobs:
               $artifactName = "windows-11"
             }
             
-            # Auto-detect build number from artifact name
+            # Auto-detect build number from artifact name based on uup-dump-get-windows-iso.ps1
             $buildNumber = switch ($artifactName) {
-              "windows-11" { "22621" }
-              "windows-10" { "19041" }
-              "windows-server-2025" { "25398" }
-              default { "22621" }
+              "windows-11" { "22631" }      # Windows 11 23H2 (22631)
+              "windows-10" { "19044" }      # Windows 10 21H2 (19044)
+              "windows-server-2025" { "26100" }  # Windows Server 2025 (26100)
+              default { "22631" }
             }
             Write-Host "Auto-detected build number: $buildNumber for artifact: $artifactName"
           }
