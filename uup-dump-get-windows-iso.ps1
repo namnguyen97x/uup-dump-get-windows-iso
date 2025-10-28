@@ -14,6 +14,13 @@ trap {
     Exit 1
 }
 
+# Add logging
+Write-Host "Starting uup-dump-get-windows-iso script"
+Write-Host "Target: $windowsTargetName"
+Write-Host "Destination: $destinationDirectory"
+Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+Write-Host "Working Directory: $(Get-Location)"
+
 $TARGETS = @{
     # see https://en.wikipedia.org/wiki/Windows_11
     # see https://en.wikipedia.org/wiki/Windows_11_version_history
@@ -372,4 +379,11 @@ function Get-WindowsIso($name, $destinationDirectory) {
     Write-Host 'All Done.'
 }
 
-Get-WindowsIso $windowsTargetName $destinationDirectory
+try {
+    Get-WindowsIso $windowsTargetName $destinationDirectory
+    Write-Host "Script completed successfully"
+} catch {
+    Write-Error "Script failed: $($_.Exception.Message)"
+    Write-Error "Stack trace: $($_.ScriptStackTrace)"
+    exit 1
+}
