@@ -74,9 +74,22 @@ try {
 
   # Validate ISO structure before processing
   Write-Host "Validating ISO structure..."
+  Write-Host "Drive letter: $driveLetter"
+  Write-Host "Sources path: $sources"
+  Write-Host "Install WIM path: $installWimOnIso"
+  Write-Host "Install ESD path: $installEsdOnIso"
+  
   if (-not (Test-Path $sources)) {
+    Write-Host "Sources folder not found at: $sources"
+    Write-Host "Checking what's actually in the root directory..."
+    if (Test-Path $driveLetter) {
+      Get-ChildItem -Path $driveLetter | ForEach-Object { Write-Host "  - $($_.Name)" }
+    }
     throw "Sources folder not found at: $sources. This indicates the ISO is not a valid Windows installation ISO."
   }
+  
+  Write-Host "Sources folder found. Checking contents..."
+  Get-ChildItem -Path $sources | ForEach-Object { Write-Host "  - $($_.Name)" }
   
   # Check for basic Windows ISO structure
   $requiredFiles = @('boot.wim')
@@ -92,6 +105,12 @@ try {
     Write-Warning "Missing required Windows ISO files: $($missingFiles -join ', ')"
     Write-Warning "This may indicate the UUP conversion process failed or the ISO is corrupted."
   }
+
+  Write-Host "Checking for install files..."
+  Write-Host "Testing install.wim: $installWimOnIso"
+  Write-Host "Test-Path result: $(Test-Path $installWimOnIso)"
+  Write-Host "Testing install.esd: $installEsdOnIso"  
+  Write-Host "Test-Path result: $(Test-Path $installEsdOnIso)"
 
   if (Test-Path $installWimOnIso) {
     Write-Host "Found install.wim on ISO. Copying to Bedi root..."
