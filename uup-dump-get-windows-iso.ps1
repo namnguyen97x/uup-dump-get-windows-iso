@@ -47,12 +47,6 @@ $TARGETS = @{
         edition = "Professional" #aka LTSC 2019
         virtualEdition = $null
     }
-    # Windows Server 2022 - EnterpriseG supported
-    "windows-server-2022" = @{
-        search = "Windows Server 2022 25398 amd64" 
-        edition = "ServerStandard"
-        virtualEdition = $null
-    }
 }
 
 function New-QueryString([hashtable]$parameters) {
