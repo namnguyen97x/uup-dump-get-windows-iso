@@ -7,9 +7,9 @@ on:
         required: false
         default: ''
       build:
-        description: 'Build number folder to create/use (e.g. 22631) - used for Bedi folder structure'
+        description: 'Build number folder to create/use (e.g. 22621) - used for Bedi folder structure'
         required: true
-        default: '22631'
+        default: '22621'
       wim_index:
         description: 'WIM/ESD image index to use (1 for typical single-index images)'
         required: true
@@ -79,10 +79,10 @@ jobs:
             
             # Auto-detect build number from artifact name based on uup-dump-get-windows-iso.ps1
             $buildNumber = switch ($artifactName) {
-              "windows-11" { "22631" }      # Windows 11 23H2 (22631)
+              "windows-11" { "22621" }      # Windows 11 22H2 (22621) - EnterpriseG supported
               "windows-10" { "19044" }      # Windows 10 21H2 (19044)
               "windows-server-2025" { "26100" }  # Windows Server 2025 (26100)
-              default { "22631" }
+              default { "22621" }
             }
             Write-Host "Auto-detected build number: $buildNumber for artifact: $artifactName"
           }
