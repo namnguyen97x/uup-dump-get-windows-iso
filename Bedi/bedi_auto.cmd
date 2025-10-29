@@ -12,16 +12,14 @@ if not exist "%BEDI%" (
 )
 
 rem Auto-select option 1 (Pro to EnterpriseG) via stdin redirection (robust)
-set "INPUT=%ROOT%\bedi_input.txt"
->"%INPUT%" echo 1
+set "BEDI_AUTO_SELECT=1"
 if exist "%NSUDO%" (
   echo Using NSudo to run Bedi as TrustedInstaller/System...
-  "%NSUDO%" -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd "%ROOT%" && call "%BEDI%" ^< "%INPUT%""
+  "%NSUDO%" -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd "%ROOT%" && set BEDI_AUTO_SELECT=1 && call "%BEDI%""
 ) else (
   echo Running Bedi directly...
-  cmd /c "pushd "%ROOT%" && call "%BEDI%" ^< "%INPUT%""
+  cmd /c "pushd "%ROOT%" && set BEDI_AUTO_SELECT=1 && call "%BEDI%""
 )
-del /f /q "%INPUT%" >nul 2>nul
 
 set "RC=%ERRORLEVEL%"
 popd

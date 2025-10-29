@@ -27,7 +27,28 @@ set "_Files=%ROOT%\Files"
 for %%# in (wimlib-imagex.exe 7z.exe NSudo.exe expand.exe expand_new.exe 7z.dll libwim-15.dll ModLCU.cmd msdelta.dll PSFExtractor.exe upmod.cmd) do (
 if not exist "%_Files%\%%#" (Call :_Warn "File "%_Files%\%%#" does not exist.")
 )
-call :_MenuTarget
+rem --- Auto non-interactive selection if BEDI_AUTO_SELECT is set ---
+if defined BEDI_AUTO_SELECT (
+  set "_opt=%BEDI_AUTO_SELECT%"
+  if "%_opt%"=="1" (
+    set "_sourSKU=Professional"& set "_targSKU=EnterpriseG"
+  ) else if "%_opt%"=="2" (
+    set "_sourSKU=Professional"& set "_targSKU=EnterpriseS"
+  ) else if "%_opt%"=="3" (
+    set "_sourSKU=Professional"& set "_targSKU=WNC"
+  ) else if "%_opt%"=="4" (
+    set "_sourSKU=Core"& set "_targSKU=Starter"
+  ) else if "%_opt%"=="5" (
+    set "_sourSKU=ServerDatacenter"& set "_targSKU=EnterpriseS"
+  ) else if "%_opt%"=="6" (
+    set "_sourSKU=ServerDatacenter"& set "_targSKU=EnterpriseG"
+  ) else (
+    rem Fallback to interactive menu if value invalid
+    call :_MenuTarget
+  )
+) else (
+  call :_MenuTarget
+)
 for /f "tokens=*" %%# in ('findstr /i "=" Bedi.ini 2^<Nul') do (set "%%#")
 Title Building Windows %_targSKU% from %_sourSKU% image  ~  #%_vbedi%
 for /f "usebackq delims=" %%# in (`powershell "\"%_targSKU%\".ToUpper()"`) do (set "_bldUpp=%%~#")
