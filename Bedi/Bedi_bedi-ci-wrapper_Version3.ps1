@@ -66,7 +66,7 @@ if (-not $driveRoot -or $driveRoot -eq '') {
 $driveLetter = $driveRoot.TrimEnd('\')
 # Normalize to root path like 'E:\' to ensure Join-Path builds absolute paths
 if ($driveLetter.Length -eq 1 -and $driveLetter -match '^[A-Za-z]$') {
-  $driveLetter = "$driveLetter:\"
+  $driveLetter = "${driveLetter}:\"
 }
 Write-Host "ISO mounted at $driveLetter"
 
