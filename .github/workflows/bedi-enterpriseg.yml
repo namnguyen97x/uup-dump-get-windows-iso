@@ -317,6 +317,43 @@ jobs:
             New-Item -ItemType Directory -Path "${{ github.workspace }}\Bedi\Files" | Out-Null
           }
 
+      - name: Install 7zip CLI (for ESD extraction)
+        shell: pwsh
+        run: |
+          choco install 7zip.commandline --no-progress -y
+          if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install 7zip.commandline"; exit 1 }
+          if (-not (Get-Command 7z.exe -ErrorAction SilentlyContinue)) { Write-Error "7z.exe not found after install"; exit 1 }
+
+      - name: Optional - Download EnterpriseG payload artifact (clients.esd / EditionSpecific / LP)
+        shell: pwsh
+        run: |
+          $buildNumber = "${{ steps.artifact-info.outputs.build }}"
+          $payloadNames = @("payload-$buildNumber","enterpriseg-payload-$buildNumber","payload-enterpriseg-$buildNumber")
+          $headers = @{ 'Authorization' = "Bearer ${{ secrets.GITHUB_TOKEN }}"; 'Accept' = 'application/vnd.github+json' }
+          $found = $null
+          try {
+            $resp = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" -Headers $headers
+            foreach ($n in $payloadNames) {
+              $a = $resp.artifacts | Where-Object { $_.name -eq $n -and -not $_.expired } | Select-Object -First 1
+              if ($a) { $found = $a; break }
+            }
+          } catch { Write-Host "Could not query artifacts: $($_.Exception.Message)" }
+
+          if ($null -ne $found) {
+            Write-Host "Found payload artifact: $($found.name)"
+            $dl = $found.archive_download_url
+            if (-not (Test-Path 'artifacts')) { New-Item -ItemType Directory artifacts | Out-Null }
+            curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o "artifacts\$($found.name).zip" $dl
+            Expand-Archive -Path "artifacts\$($found.name).zip" -DestinationPath "artifacts\$($found.name)" -Force
+            $target = Join-Path "${{ github.workspace }}\Bedi" $buildNumber
+            if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target | Out-Null }
+            Get-ChildItem -Path "artifacts\$($found.name)" -Recurse -Include "clients.esd","Microsoft-Windows-EditionSpecific-EnterpriseG-Package.esd","Microsoft-Windows-Client-LanguagePack-Package-amd64-en-us.esd" | ForEach-Object {
+              Copy-Item $_.FullName -Destination $target -Force
+            }
+          } else {
+            Write-Host "No payload artifact found. Proceeding; bedi_auto will fail if payloads are missing."
+          }
+
       - name: Install Windows ADK Deployment Tools (oscdimg)
         shell: pwsh
         run: |
