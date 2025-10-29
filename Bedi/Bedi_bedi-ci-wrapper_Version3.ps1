@@ -257,6 +257,7 @@ _wifirtl=Without
   $rc = $LASTEXITCODE
   Pop-Location
 
+  $verified = $false
   if ($rc -ne 0) {
     Write-Warning "Bedi.cmd exited with code $rc. Check Bedi\\log* for details."
   } else {
@@ -306,13 +307,14 @@ _wifirtl=Without
           if (-not ($winfo -match 'EnterpriseG')) {
             throw "wimlib did not indicate EnterpriseG"
           }
+          $verified = $true
         } catch {
           throw "Failed to verify edition (DISM and wimlib). Please check Bedi logs. Error: $($_.Exception.Message)"
         }
       } else {
         throw "Failed to verify edition with DISM and wimlib not available."
       }
-    }
+    } else { $verified = $true }
 
     # Basic debloat verification from logs
     $logAny = Get-ChildItem -Path (Join-Path $bediRoot 'log*') -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -327,10 +329,11 @@ _wifirtl=Without
       }
     }
 
-    Write-Host "EnterpriseG verification passed. Proceeding to ISO build."
+    if ($verified) { Write-Host "EnterpriseG verification passed. Proceeding to ISO build." }
   }
 
   # Build ISO that includes the customized install.wim
+  if (-not $verified) { throw "EnterpriseG verification failed. Aborting ISO build." }
   try {
     Write-Host "Preparing bootable ISO with customized install.wim..."
 

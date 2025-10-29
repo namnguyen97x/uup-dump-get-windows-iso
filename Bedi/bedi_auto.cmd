@@ -13,6 +13,7 @@ set "BUILD_DIR=%ROOT%\%BUILD%"
 set "EDITION=EnterpriseG"
 set "EDITION_KEY=YYVX9-NTFWV-6MDM3-9PT4T-4M68B"
 set "LANG=en-US"
+set "SCR=%ROOT%\log_auto\scratch"
 
 rem Lite options (align with Bedi.ini semantics)
 set "_store=Without"
@@ -32,6 +33,7 @@ if not exist "%BUILD_DIR%\Microsoft-Windows-Client-LanguagePack-Package-amd64-en
   exit /b 1
 )
 if not exist "%LOG%" mkdir "%LOG%" >nul 2>nul
+if not exist "%SCR%" mkdir "%SCR%" >nul 2>nul
 
 set "SEVENZ=%ROOT%\Files\7z.exe"
 set "TMPPAY=%ROOT%\_payload_%BUILD%"
@@ -44,23 +46,39 @@ if exist "%SEVENZ%" (
   echo WARNING: 7z.exe not found. Trying to add ESD directly may fail.
 )
 
+rem Elevation check; prefer NSudo TrustedInstaller if available
+set "NSUDO=%ROOT%\Files\NSudo.exe"
+net session >nul 2>nul
+if errorlevel 1 (
+  if exist "%NSUDO%" (
+    echo Relaunching with NSudo (TrustedInstaller)...
+    "%NSUDO%" -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd "%ROOT%" && call "%~f0""
+    set "RC=%ERRORLEVEL%"
+    popd
+    exit /b %RC%
+  ) else (
+    echo ERROR: This script requires Administrator privileges. Place NSudo.exe in Files or run elevated.
+    exit /b 1
+  )
+)
+
 if exist "%MOUNT%" rmdir /s /q "%MOUNT%"
 mkdir "%MOUNT%" >nul 2>nul
 echo Mounting image...
-dism /English /Mount-Image /ImageFile:"%WIM%" /Index:1 /MountDir:"%MOUNT%" /LogPath:"%LOG%\mount.log" || goto :fail
+dism /English /ScratchDir:"%SCR%" /Mount-Image /ImageFile:"%WIM%" /Index:1 /MountDir:"%MOUNT%" /LogPath:"%LOG%\mount.log" || goto :fail
 
 echo Setting edition to %EDITION% ...
-dism /English /Image:"%MOUNT%" /Set-Edition:%EDITION% /ProductKey:%EDITION_KEY% /LogPath:"%LOG%\edition.log" >nul 2>nul
+dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Set-Edition:%EDITION% /ProductKey:%EDITION_KEY% /LogPath:"%LOG%\edition.log" >nul 2>nul
 
 echo Adding language pack (en-US)...
 for %%C in ("%TMPPAY%\*.cab") do (
-  dism /English /Image:"%MOUNT%" /Add-Package /PackagePath:"%%~fC" /LogPath:"%LOG%\lp.log" >nul 2>nul
+  dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Add-Package /PackagePath:"%%~fC" /LogPath:"%LOG%\lp.log" >nul 2>nul
 )
-dism /English /Image:"%MOUNT%" /Set-AllIntl:%LANG% /LogPath:"%LOG%\intl.log" >nul 2>nul
+dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Set-AllIntl:%LANG% /LogPath:"%LOG%\intl.log" >nul 2>nul
 
 if /i "%_msedge%"=="Without" (
   echo Removing Microsoft Edge (best-effort)...
-  dism /English /Image:"%MOUNT%" /Remove-Edge /LogPath:"%LOG%\edge.log" >nul 2>nul
+  dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Remove-Edge /LogPath:"%LOG%\edge.log" >nul 2>nul
 )
 
 if /i "%_store%"=="Without" (
@@ -74,14 +92,14 @@ if /i "%_store%"=="Without" (
     "Microsoft.WebMediaExtensions"
     "Microsoft.WebpImageExtension"
   ) do (
-    dism /English /Image:"%MOUNT%" /Remove-ProvisionedAppxPackage /PackageName:%%~A /LogPath:"%LOG%\appx_%%~A.log" >nul 2>nul
+    dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Remove-ProvisionedAppxPackage /PackageName:%%~A /LogPath:"%LOG%\appx_%%~A.log" >nul 2>nul
   )
 )
 
 if /i "%_defender%"=="Without" (
   echo Disabling Defender features (best-effort)...
-  dism /English /Image:"%MOUNT%" /Disable-Feature /FeatureName:Windows-Defender /Remove /LogPath:"%LOG%\def1.log" >nul 2>nul
-  dism /English /Image:"%MOUNT%" /Disable-Feature /FeatureName:Windows-Defender-Default-Definitions /Remove /LogPath:"%LOG%\def2.log" >nul 2>nul
+  dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Disable-Feature /FeatureName:Windows-Defender /Remove /LogPath:"%LOG%\def1.log" >nul 2>nul
+  dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Disable-Feature /FeatureName:Windows-Defender-Default-Definitions /Remove /LogPath:"%LOG%\def2.log" >nul 2>nul
 )
 
 if /i "%_helospeech%"=="Without" (
@@ -89,7 +107,7 @@ if /i "%_helospeech%"=="Without" (
   dism /English /Image:"%MOUNT%" /Get-Capabilities > "%LOG%\caps.txt" 2>&1
   for /f "tokens=1,* delims=:" %%i in ('findstr /i "Capability Identity" "%LOG%\caps.txt"') do (
     echo %%j | findstr /i "Hello.Face Speech" >nul && (
-      for /f "tokens=* delims= " %%z in ("%%j") do dism /English /Image:"%MOUNT%" /Remove-Capability /CapabilityName:%%z /LogPath:"%LOG%\cap_rm.log" >nul 2>nul
+      for /f "tokens=* delims= " %%z in ("%%j") do dism /English /ScratchDir:"%SCR%" /Image:"%MOUNT%" /Remove-Capability /CapabilityName:%%z /LogPath:"%LOG%\cap_rm.log" >nul 2>nul
     )
   )
 )
@@ -100,7 +118,7 @@ if /i "%_winre%"=="Without" (
 )
 
 echo Committing image...
-dism /English /Unmount-Image /MountDir:"%MOUNT%" /Commit /LogPath:"%LOG%\commit.log" || goto :fail
+dism /English /ScratchDir:"%SCR%" /Unmount-Image /MountDir:"%MOUNT%" /Commit /LogPath:"%LOG%\commit.log" || goto :fail
 
 for /f "delims=" %%L in ('dism /English /Get-WimInfo /WimFile:"%WIM%" /Index:1 ^| find /i "Current Edition"') do set "CURRED=%%L"
 echo %CURRED%
@@ -114,7 +132,7 @@ exit /b 0
 
 :fail
 echo ERROR: DISM failed. See logs in %LOG%.
-if exist "%MOUNT%" dism /English /Unmount-Image /MountDir:"%MOUNT%" /Discard >nul 2>nul
+if exist "%MOUNT%" dism /English /ScratchDir:"%SCR%" /Unmount-Image /MountDir:"%MOUNT%" /Discard >nul 2>nul
 exit /b 1
 
 
