@@ -329,7 +329,7 @@ jobs:
             for ($i=1; $i -le $retries; $i++) {
               try {
                 if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
-                Write-Host "Attempt $i: downloading $url ..."
+                Write-Host "Attempt ${i}: downloading ${url} ..."
                 Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
                 if ((Test-Path $dest) -and ((Get-Item $dest).Length -gt 1000000)) { return $true }
                 Write-Host "Downloaded file too small, retrying..."
