@@ -245,7 +245,43 @@ _wifirtl=Without
   $rc = $LASTEXITCODE
   Pop-Location
 
-  if ($rc -ne 0) { Write-Warning "Bedi.cmd exited with code $rc. Check Bedi\log* for details." } else { Write-Host "Bedi completed successfully (check outputs in $bediRoot)." }
+  if ($rc -ne 0) {
+    Write-Warning "Bedi.cmd exited with code $rc. Check Bedi\\log* for details."
+  } else {
+    Write-Host "Bedi finished. Verifying EnterpriseG transformation and debloat..."
+
+    # Verify install.wim exists and is reasonably large (> 1GB)
+    if (-not (Test-Path $installWim)) { throw "install.wim not found after Bedi run." }
+    $wimInfo = Get-Item $installWim
+    if ($wimInfo.Length -lt 1GB) { Write-Warning "install.wim is smaller than expected: $([math]::Round($wimInfo.Length/1MB,2)) MB" }
+
+    # Verify edition using DISM
+    try {
+      $editionLine = (dism /English /Get-WimInfo /WimFile:$installWim /Index:1 | Select-String -Pattern "Current Edition\s*:").ToString()
+      if (-not $editionLine) { $editionLine = (dism /English /Get-WimInfo /WimFile:$installWim | Select-String -Pattern "Current Edition\s*:").ToString() }
+      Write-Host "DISM: $editionLine"
+      if ($editionLine -notmatch 'EnterpriseG') {
+        throw "Edition check failed. Expected EnterpriseG. Line: '$editionLine'"
+      }
+    } catch {
+      throw "Failed to verify edition with DISM: $($_.Exception.Message)"
+    }
+
+    # Basic debloat verification from logs
+    $logAny = Get-ChildItem -Path (Join-Path $bediRoot 'log*') -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $logAny) { Write-Warning "No Bedi logs found (log*). Skipping debloat verification." }
+    else {
+      $logText = (Get-ChildItem -Path (Join-Path $bediRoot 'log*') -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_ -Raw -ErrorAction SilentlyContinue }) -join "`n"
+      if ($iniContent -match '_msedge=Without') {
+        if ($logText -notmatch 'Remove Microsoft Edge|/Remove-Edge') { Write-Warning "Edge removal not observed in logs." }
+      }
+      if ($iniContent -match '_defender=Without') {
+        if ($logText -notmatch 'Quarantine Windows Defender|defender') { Write-Warning "Defender removal not observed in logs." }
+      }
+    }
+
+    Write-Host "EnterpriseG verification passed. Proceeding to ISO build."
+  }
 
   # Build ISO that includes the customized install.wim
   try {
