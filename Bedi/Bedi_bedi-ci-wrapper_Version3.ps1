@@ -253,7 +253,9 @@ _wifirtl=Without
   if (-not (Test-Path $autoCmd)) { throw "bedi_auto.cmd not found at $autoCmd" }
   Write-Host "Running bedi_auto.cmd (non-interactive EnterpriseG build)..."
   Push-Location $bediRoot
-  & cmd /c "set BEDI_BUILD=$Build && set BEDI_EDITION=$TargetSKU && set BEDI_LANG=en-US && \"$autoCmd\""
+  $autoCmdEsc = $autoCmd.Replace('"','\"')
+  $envCmd = "set BEDI_BUILD=$Build && set BEDI_EDITION=$TargetSKU && set BEDI_LANG=en-US && call `"$autoCmd`""
+  & cmd /c $envCmd
   $rc = $LASTEXITCODE
   Pop-Location
 
