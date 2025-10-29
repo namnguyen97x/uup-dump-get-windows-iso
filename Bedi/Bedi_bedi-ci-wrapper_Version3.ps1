@@ -240,20 +240,27 @@ _wifirtl=Without
   $bediCmd = Join-Path $bediRoot 'Bedi.cmd'
   if (-not (Test-Path $bediCmd)) { throw "Bedi.cmd not found at $bediCmd" }
 
+  # Create input file to auto-select option 1 (Pro to EnterpriseG)
+  $inputFile = Join-Path $bediRoot 'bedi_input.txt'
+  "1" | Out-File -FilePath $inputFile -Encoding ASCII -NoNewline
+
   Push-Location $bediRoot
   $nsudoExe = Join-Path $filesDir 'NSudo.exe'
   if (Test-Path $nsudoExe) {
     Write-Host "Using NSudo to run Bedi as TrustedInstaller/System..."
     $bediCmdQuoted = '"' + $bediCmd + '"'
     # Explicitly set working directory to avoid 'Bedi.cmd not recognized'
-    & $nsudoExe -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd $bediRoot && $bediCmdQuoted"
+    & $nsudoExe -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd $bediRoot && $bediCmdQuoted < bedi_input.txt"
     $rc = $LASTEXITCODE
   } else {
     Write-Host "NSudo not found. Attempting to run Bedi directly (requires elevated session)..."
-    Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',"pushd $bediRoot && "$bediCmd"" -Wait -NoNewWindow
+    Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',"pushd $bediRoot && $bediCmd < bedi_input.txt" -Wait -NoNewWindow
     $rc = $LASTEXITCODE
   }
   Pop-Location
+
+  # Clean up input file
+  if (Test-Path $inputFile) { Remove-Item $inputFile -Force }
 
   if ($rc -ne 0) { Write-Warning "Bedi.cmd exited with code $rc. Check Bedi\log* for details." } else { Write-Host "Bedi completed successfully (check outputs in $bediRoot)." }
 
