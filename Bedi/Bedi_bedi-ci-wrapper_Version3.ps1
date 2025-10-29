@@ -244,7 +244,7 @@ _wifirtl=Without
     if (-not (Test-Path $lpEsd)) { $missing += (Split-Path -Leaf $lpEsd) }
     if (-not (Test-Path $gEsd))  { $missing += (Split-Path -Leaf $gEsd) }
     if ($missing.Count -gt 0) {
-      throw "Missing required EnterpriseG payload(s) in $buildDir: $($missing -join ', '). Place the ESDs per README before running."
+      throw "Missing required EnterpriseG payload(s) in ${buildDir}: $($missing -join ', '). Place the ESDs per README before running."
     }
   }
 
