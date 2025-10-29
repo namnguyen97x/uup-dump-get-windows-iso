@@ -314,9 +314,7 @@ _wifirtl=Without
       }
     }
 
-    # Always place the customized install.wim in the output directory for convenience
-    Copy-Item -Path $installWim -Destination (Join-Path $outDir 'install.wim') -Force
-    Write-Host "Output directory prepared: $outDir"
+    Write-Host "Output directory prepared (ISO only): $outDir"
   } catch {
     Write-Warning "Failed to build ISO: $($_.Exception.Message)"
   }
