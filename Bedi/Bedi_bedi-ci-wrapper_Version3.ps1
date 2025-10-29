@@ -236,6 +236,18 @@ _wifirtl=Without
     }
   }
 
+  # Preflight: required EnterpriseG payloads must exist in build folder
+  if ($TargetSKU -eq 'EnterpriseG') {
+    $lpEsd = Join-Path $buildDir 'Microsoft-Windows-Client-LanguagePack-Package-amd64-en-us.esd'
+    $gEsd  = Join-Path $buildDir 'Microsoft-Windows-EditionSpecific-EnterpriseG-Package.esd'
+    $missing = @()
+    if (-not (Test-Path $lpEsd)) { $missing += (Split-Path -Leaf $lpEsd) }
+    if (-not (Test-Path $gEsd))  { $missing += (Split-Path -Leaf $gEsd) }
+    if ($missing.Count -gt 0) {
+      throw "Missing required EnterpriseG payload(s) in $buildDir: $($missing -join ', '). Place the ESDs per README before running."
+    }
+  }
+
   # Run non-interactive automation script that drives Bedi.cmd
   $autoCmd = Join-Path $bediRoot 'bedi_auto.cmd'
   if (-not (Test-Path $autoCmd)) { throw "bedi_auto.cmd not found at $autoCmd" }
