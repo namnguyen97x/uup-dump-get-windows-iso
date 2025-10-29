@@ -11,13 +11,13 @@ if not exist "%BEDI%" (
   exit /b 1
 )
 
-rem Auto-select option 1 (Pro to EnterpriseG); Lite options are taken from Bedi.ini
+rem Auto-select option 1 (Pro to EnterpriseG); Lite options come from Bedi.ini
 if exist "%NSUDO%" (
   echo Using NSudo to run Bedi as TrustedInstaller/System...
-  "%NSUDO%" -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd "%ROOT%" && echo 1^| "%BEDI%""
+  "%NSUDO%" -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd "%ROOT%" && (echo 1) ^| call "%BEDI%""
 ) else (
   echo Running Bedi directly...
-  cmd /c "pushd "%ROOT%" && echo 1^| "%BEDI%""
+  cmd /c "pushd "%ROOT%" && (echo 1) ^| call "%BEDI%""
 )
 
 set "RC=%ERRORLEVEL%"
