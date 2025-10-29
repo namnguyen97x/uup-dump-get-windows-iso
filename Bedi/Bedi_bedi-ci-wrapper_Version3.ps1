@@ -255,6 +255,72 @@ _wifirtl=Without
 
   if ($rc -ne 0) { Write-Warning "Bedi.cmd exited with code $rc. Check Bedi\log* for details." } else { Write-Host "Bedi completed successfully (check outputs in $bediRoot)." }
 
+  # Build ISO that includes the customized install.wim
+  try {
+    Write-Host "Preparing bootable ISO with customized install.wim..."
+
+    $outDir = Join-Path $bediRoot ("bedi-output-$Build")
+    if (Test-Path $outDir) { Remove-Item -Path $outDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $outDir | Out-Null
+
+    $staging = Join-Path $bediRoot 'iso-staging'
+    if (Test-Path $staging) { Remove-Item -Path $staging -Recurse -Force }
+    New-Item -ItemType Directory -Path $staging | Out-Null
+
+    # Copy the original ISO contents to staging
+    Write-Host "Copying original ISO contents from $driveLetter to staging..."
+    Get-ChildItem -Path $driveLetter -Force | ForEach-Object {
+      $dest = Join-Path $staging $_.Name
+      Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # Replace sources\install.wim with the customized one
+    $stagingSources = Join-Path $staging 'sources'
+    if (-not (Test-Path $stagingSources)) { throw "Staging 'sources' folder missing at $stagingSources" }
+    $stagingInstallWim = Join-Path $stagingSources 'install.wim'
+    Copy-Item -Path $installWim -Destination $stagingInstallWim -Force
+    Write-Host "Replaced staging install.wim -> $stagingInstallWim"
+
+    # Try to locate oscdimg.exe (preferred for a dual-boot BIOS/UEFI ISO)
+    $oscdimgCandidates = @(
+      (Join-Path $filesDir 'oscdimg.exe'),
+      'C:\\Program Files (x86)\\Windows Kits\\10\\Assessment and Deployment Kit\\Deployment Tools\\amd64\\Oscdimg\\oscdimg.exe',
+      'C:\\Program Files (x86)\\Windows Kits\\11\\Assessment and Deployment Kit\\Deployment Tools\\amd64\\Oscdimg\\oscdimg.exe'
+    )
+    $oscdimg = $oscdimgCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    $isoOut = Join-Path $outDir ("bedi-output-$Build.iso")
+    $label = "BEDI_${Build}_G"
+
+    if ($oscdimg) {
+      $etfs = Join-Path $staging 'boot/etfsboot.com'
+      $efisys = Join-Path $staging 'efi/microsoft/boot/efisys.bin'
+      if (-not (Test-Path $etfs)) { Write-Warning "etfsboot.com not found at $etfs; BIOS boot may not work." }
+      if (-not (Test-Path $efisys)) { Write-Warning "efisys.bin not found at $efisys; UEFI boot may not work." }
+      $bootdata = "2#p0,e,b$etfs#pEF,e,b$efisys"
+      Write-Host "Creating bootable ISO using oscdimg..."
+      & $oscdimg -bootdata:$bootdata -u2 -udfver102 -l:$label $staging $isoOut
+      Write-Host "ISO created: $isoOut"
+    } else {
+      # Fallback: create a plain ISO via 7-Zip (may not be bootable)
+      $z7 = Join-Path $filesDir '7z.exe'
+      if (Test-Path $z7) {
+        Write-Warning "oscdimg.exe not found. Creating a non-guaranteed-bootable ISO via 7-Zip."
+        & $z7 a -tiso -r -y $isoOut (Join-Path $staging '*') | Out-Null
+        Write-Host "ISO created (bootability not guaranteed): $isoOut"
+        Write-Host "For a fully bootable ISO, install Windows ADK Deployment Tools to provide oscdimg.exe or place oscdimg.exe in Bedi/Files."
+      } else {
+        Write-Warning "Neither oscdimg.exe nor 7z.exe available to make an ISO. Uploading install.wim only."
+      }
+    }
+
+    # Always place the customized install.wim in the output directory for convenience
+    Copy-Item -Path $installWim -Destination (Join-Path $outDir 'install.wim') -Force
+    Write-Host "Output directory prepared: $outDir"
+  } catch {
+    Write-Warning "Failed to build ISO: $($_.Exception.Message)"
+  }
+
 } finally {
   Write-Host "Unmounting ISO..."
   try { Dismount-DiskImage -ImagePath $isoResolved -ErrorAction SilentlyContinue } catch { Write-Warning "Could not dismount by path; you may need to dismount manually." }
