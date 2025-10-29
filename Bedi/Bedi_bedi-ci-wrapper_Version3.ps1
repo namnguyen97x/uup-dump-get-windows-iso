@@ -250,21 +250,56 @@ _wifirtl=Without
   } else {
     Write-Host "Bedi finished. Verifying EnterpriseG transformation and debloat..."
 
-    # Verify install.wim exists and is reasonably large (> 1GB)
-    if (-not (Test-Path $installWim)) { throw "install.wim not found after Bedi run." }
+    # Wait for install.wim to appear and reach a reasonable size
+    $maxWaitSec = 300
+    $waitStart = Get-Date
+    while (-not (Test-Path $installWim)) {
+      if (((Get-Date) - $waitStart).TotalSeconds -gt $maxWaitSec) { throw "Timeout waiting for install.wim to be created." }
+      Start-Sleep -Seconds 2
+    }
+    # Wait a bit for file to finalize writes
+    Start-Sleep -Seconds 3
     $wimInfo = Get-Item $installWim
-    if ($wimInfo.Length -lt 1GB) { Write-Warning "install.wim is smaller than expected: $([math]::Round($wimInfo.Length/1MB,2)) MB" }
+    if ($wimInfo.Length -lt 800MB) { Write-Warning "install.wim is smaller than expected: $([math]::Round($wimInfo.Length/1MB,2)) MB" }
 
-    # Verify edition using DISM
+    # Verify edition using DISM (robust parsing)
+    $dismOk = $false
     try {
-      $editionLine = (dism /English /Get-WimInfo /WimFile:$installWim /Index:1 | Select-String -Pattern "Current Edition\s*:").ToString()
-      if (-not $editionLine) { $editionLine = (dism /English /Get-WimInfo /WimFile:$installWim | Select-String -Pattern "Current Edition\s*:").ToString() }
-      Write-Host "DISM: $editionLine"
-      if ($editionLine -notmatch 'EnterpriseG') {
-        throw "Edition check failed. Expected EnterpriseG. Line: '$editionLine'"
+      $out = & dism /English /Get-WimInfo /WimFile:$installWim /Index:1 2>&1
+      if (-not $out) { $out = & dism /English /Get-WimInfo /WimFile:$installWim 2>&1 }
+      if ($out) {
+        $line = ($out | Select-String -Pattern "Current Edition\s*:")
+        if ($line) {
+          $txt = $line.ToString()
+          Write-Host "DISM: $txt"
+          if ($txt -match 'EnterpriseG') { $dismOk = $true }
+        } else {
+          Write-Warning "DISM output did not contain 'Current Edition:'"
+        }
+      } else {
+        Write-Warning "DISM returned no output"
       }
     } catch {
-      throw "Failed to verify edition with DISM: $($_.Exception.Message)"
+      Write-Warning "DISM check error: $($_.Exception.Message)"
+    }
+
+    if (-not $dismOk) {
+      # Fallback to wimlib-imagex if available
+      $wimlibExe = Join-Path $filesDir 'wimlib-imagex.exe'
+      if (Test-Path $wimlibExe) {
+        try {
+          $winfo = & $wimlibExe info $installWim 1 2>&1
+          $wline = ($winfo | Select-String -Pattern "Edition|NAME|FLAGS" | Select-Object -First 1)
+          Write-Host "wimlib: $($wline.ToString())"
+          if (-not ($winfo -match 'EnterpriseG')) {
+            throw "wimlib did not indicate EnterpriseG"
+          }
+        } catch {
+          throw "Failed to verify edition (DISM and wimlib). Please check Bedi logs. Error: $($_.Exception.Message)"
+        }
+      } else {
+        throw "Failed to verify edition with DISM and wimlib not available."
+      }
     }
 
     # Basic debloat verification from logs
