@@ -244,11 +244,13 @@ _wifirtl=Without
   $nsudoExe = Join-Path $filesDir 'NSudo.exe'
   if (Test-Path $nsudoExe) {
     Write-Host "Using NSudo to run Bedi as TrustedInstaller/System..."
-    & $nsudoExe -U:T -P:E -UseCurrentConsole -Wait cmd /c "Bedi.cmd"
+    $bediCmdQuoted = '"' + $bediCmd + '"'
+    # Explicitly set working directory to avoid 'Bedi.cmd not recognized'
+    & $nsudoExe -U:T -P:E -UseCurrentConsole -Wait cmd /c "pushd $bediRoot && $bediCmdQuoted"
     $rc = $LASTEXITCODE
   } else {
     Write-Host "NSudo not found. Attempting to run Bedi directly (requires elevated session)..."
-    Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','Bedi.cmd' -Wait -NoNewWindow
+    Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',"pushd $bediRoot && "$bediCmd"" -Wait -NoNewWindow
     $rc = $LASTEXITCODE
   }
   Pop-Location
@@ -302,16 +304,7 @@ _wifirtl=Without
       & $oscdimg -bootdata:$bootdata -u2 -udfver102 -l:$label $staging $isoOut
       Write-Host "ISO created: $isoOut"
     } else {
-      # Fallback: create a plain ISO via 7-Zip (may not be bootable)
-      $z7 = Join-Path $filesDir '7z.exe'
-      if (Test-Path $z7) {
-        Write-Warning "oscdimg.exe not found. Creating a non-guaranteed-bootable ISO via 7-Zip."
-        & $z7 a -tiso -r -y $isoOut (Join-Path $staging '*') | Out-Null
-        Write-Host "ISO created (bootability not guaranteed): $isoOut"
-        Write-Host "For a fully bootable ISO, install Windows ADK Deployment Tools to provide oscdimg.exe or place oscdimg.exe in Bedi/Files."
-      } else {
-        Write-Warning "Neither oscdimg.exe nor 7z.exe available to make an ISO. Uploading install.wim only."
-      }
+      throw "oscdimg.exe not found. Please install Windows ADK Deployment Tools or place oscdimg.exe in Bedi/Files to produce a bootable ISO."
     }
 
     Write-Host "Output directory prepared (ISO only): $outDir"
