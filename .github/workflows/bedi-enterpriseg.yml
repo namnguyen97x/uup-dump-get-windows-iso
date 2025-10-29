@@ -322,7 +322,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $adkUrl = 'https://go.microsoft.com/fwlink/?linkid=2246812'  # Windows ADK Web Installer (latest)
+          $adkUrl = 'https://download.microsoft.com/download/2/d/9/2d9c8902-3fcd-48a6-a22a-432b08bed61e/ADK/adksetup.exe'  # Windows ADK Web Installer (direct)
           $adkPath = Join-Path $env:TEMP 'adksetup.exe'
           
           function Download-With-Retry($url, $dest, $retries = 3) {
