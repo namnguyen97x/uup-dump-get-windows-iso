@@ -29,10 +29,14 @@ set "_winre=Without"
 set "_wifirtl=Without"
 
 if not exist "%WIM%" (echo ERROR: %WIM% not found.& exit /b 1)
-if not exist "%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd" (
-  echo ERROR: Missing %BUILD%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd
+set "EDITIONSPEC_ESD=%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd"
+set "CLIENTS_ESD=%BUILD_DIR%\clients.esd"
+
+if not exist "%EDITIONSPEC_ESD%" if not exist "%CLIENTS_ESD%" (
+  echo ERROR: Missing %BUILD%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd ^(or clients.esd containing it^)
   exit /b 1
 )
+
 if not exist "%BUILD_DIR%\Microsoft-Windows-Client-LanguagePack-Package-amd64-en-us.esd" (
   echo ERROR: Missing %BUILD%\Microsoft-Windows-Client-LanguagePack-Package-amd64-en-us.esd
   exit /b 1
@@ -46,7 +50,16 @@ if exist "%TMPPAY%" rmdir /s /q "%TMPPAY%"
 mkdir "%TMPPAY%" >nul 2>nul
 if exist "%SEVENZ%" (
   "%SEVENZ%" x -y -o"%TMPPAY%" "%BUILD_DIR%\Microsoft-Windows-Client-LanguagePack-Package-amd64-en-us.esd" >nul 2>nul
-  "%SEVENZ%" x -y -o"%TMPPAY%" "%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd" >nul 2>nul
+  if exist "%EDITIONSPEC_ESD%" (
+    "%SEVENZ%" x -y -o"%TMPPAY%" "%EDITIONSPEC_ESD%" >nul 2>nul
+  ) else (
+    echo Extracting EditionSpecific from clients.esd...
+    "%SEVENZ%" l "%CLIENTS_ESD%" | find /i "Microsoft-Windows-EditionSpecific-%EDITION%-Package" >nul || (
+      echo ERROR: clients.esd does not contain EditionSpecific-%EDITION% package
+      exit /b 1
+    )
+    "%SEVENZ%" x -y -o"%TMPPAY%" "%CLIENTS_ESD%" "*Microsoft-Windows-EditionSpecific-%EDITION%-Package*" >nul 2>nul
+  )
 ) else (
   echo WARNING: 7z.exe not found. Trying to add ESD directly may fail.
 )
