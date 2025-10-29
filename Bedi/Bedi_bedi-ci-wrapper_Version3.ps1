@@ -275,11 +275,13 @@ _wifirtl=Without
 
     # Try to locate oscdimg.exe (preferred for a dual-boot BIOS/UEFI ISO)
     $oscdimgCandidates = @(
+      'oscdimg.exe',
       (Join-Path $filesDir 'oscdimg.exe'),
+      'C:\\ProgramData\\chocolatey\\bin\\oscdimg.exe',
       'C:\\Program Files (x86)\\Windows Kits\\10\\Assessment and Deployment Kit\\Deployment Tools\\amd64\\Oscdimg\\oscdimg.exe',
       'C:\\Program Files (x86)\\Windows Kits\\11\\Assessment and Deployment Kit\\Deployment Tools\\amd64\\Oscdimg\\oscdimg.exe'
     )
-    $oscdimg = $oscdimgCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    $oscdimg = ($oscdimgCandidates | Where-Object { ($_ -eq 'oscdimg.exe' -and (Get-Command oscdimg.exe -ErrorAction SilentlyContinue)) -or (Test-Path $_) } | Select-Object -First 1)
 
     $isoOut = Join-Path $outDir ("bedi-output-$Build.iso")
     $label = "BEDI_${Build}_G"

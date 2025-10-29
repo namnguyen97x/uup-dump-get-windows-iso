@@ -317,6 +317,20 @@ jobs:
             New-Item -ItemType Directory -Path "${{ github.workspace }}\Bedi\Files" | Out-Null
           }
 
+      - name: Install oscdimg (Chocolatey)
+        shell: pwsh
+        run: |
+          choco install oscdimg --no-progress -y
+          if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install oscdimg via Chocolatey"; exit 1 }
+          $osc = Get-Command oscdimg.exe -ErrorAction SilentlyContinue
+          if ($null -eq $osc) {
+            $cand = 'C:\\ProgramData\\chocolatey\\bin\\oscdimg.exe'
+            if (-not (Test-Path $cand)) { Write-Error "oscdimg.exe not found after install"; exit 1 }
+            Write-Host "oscdimg: $cand"
+          } else {
+            Write-Host "oscdimg: $($osc.Source)"
+          }
+
       - name: Validate runner prerequisites
         shell: pwsh
         run: |
@@ -380,7 +394,6 @@ jobs:
         with:
           name: bedi-output-${{ steps.artifact-info.outputs.build }}
           path: |
-            Bedi\*.wim
-            Bedi\*.esd
+            Bedi\bedi-output-${{ steps.artifact-info.outputs.build }}\*.iso
             Bedi\log*
             Bedi\*.log
