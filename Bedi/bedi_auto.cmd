@@ -30,6 +30,7 @@ set "_winre=Without"
 set "_wifirtl=Without"
 
 if not exist "%WIM%" (echo ERROR: %WIM% not found.& exit /b 1)
+if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%" >nul 2>nul
 set "EDITIONSPEC_ESD=%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd"
 set "CLIENTS_ESD=%BUILD_DIR%\clients.esd"
 
@@ -39,12 +40,17 @@ if not exist "%EDITIONSPEC_ESD%" (
     set "EDITIONSPEC_ESD=%BUILD_DIR%\%%p"
     echo Found EditionSpecific ESD: %%p
   )
+  if not exist "%EDITIONSPEC_ESD%" if exist "%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd" (
+    set "EDITIONSPEC_ESD=%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd"
+    echo Found EditionSpecific ESD (exact): Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd
+  )
 )
 
 if not exist "%EDITIONSPEC_ESD%" if not exist "%CLIENTS_ESD%" (
   echo ERROR: Missing EditionSpecific-%EDITION% ESD ^(or clients.esd containing it^) in "%BUILD_DIR%"
   echo DEBUG: Listing %BUILD_DIR%
   dir /b "%BUILD_DIR%"
+  dir /b %BUILD_DIR%
   exit /b 1
 )
 
