@@ -18,6 +18,7 @@ rem Allow workflow to override via environment
 if defined BEDI_BUILD set "BUILD=%BEDI_BUILD%"
 if defined BEDI_EDITION set "EDITION=%BEDI_EDITION%"
 if defined BEDI_LANG set "LANG=%BEDI_LANG%"
+set "BUILD_DIR=%ROOT%\%BUILD%"
 set "SCR=%ROOT%\log_auto\scratch"
 
 rem Lite options (align with Bedi.ini semantics)
