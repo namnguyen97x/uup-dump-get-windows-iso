@@ -236,15 +236,12 @@ _wifirtl=Without
     }
   }
 
-  # Preflight: required EnterpriseG payloads must exist in build folder
+  # Preflight: warn (do not fail) if payloads missing; bedi_auto will attempt flexible resolution or fail with diagnostics
   if ($TargetSKU -eq 'EnterpriseG') {
     $lpEsd = Join-Path $buildDir 'Microsoft-Windows-Client-LanguagePack-Package-amd64-en-us.esd'
     $gEsd  = Join-Path $buildDir 'Microsoft-Windows-EditionSpecific-EnterpriseG-Package.esd'
-    $missing = @()
-    if (-not (Test-Path $lpEsd)) { $missing += (Split-Path -Leaf $lpEsd) }
-    if (-not (Test-Path $gEsd))  { $missing += (Split-Path -Leaf $gEsd) }
-    if ($missing.Count -gt 0) {
-      throw "Missing required EnterpriseG payload(s) in ${buildDir}: $($missing -join ', '). Place the ESDs per README before running."
+    if (-not (Test-Path $lpEsd) -or -not (Test-Path $gEsd)) {
+      Write-Warning "EnterpriseG payload ESDs not fully present in $buildDir. bedi_auto will try pattern search or clients.esd if available."
     }
   }
 
