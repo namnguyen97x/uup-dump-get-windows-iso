@@ -34,13 +34,14 @@ set "CLIENTS_ESD=%BUILD_DIR%\clients.esd"
 
 rem Resolve EditionSpecific ESD flexibly if missing
 if not exist "%EDITIONSPEC_ESD%" (
-  for /f "delims=" %%p in ('dir /b /a:-d "%BUILD_DIR%\*EditionSpecific-%EDITION%-Package*.esd" 2^>nul') do (
+  for /f "delims=" %%p in ('dir /b /a:-d "%BUILD_DIR%\*EditionSpecific*%EDITION%*Package*.esd" 2^>nul') do (
     set "EDITIONSPEC_ESD=%BUILD_DIR%\%%p"
+    echo Found EditionSpecific ESD: %%p
   )
 )
 
 if not exist "%EDITIONSPEC_ESD%" if not exist "%CLIENTS_ESD%" (
-  echo ERROR: Missing %BUILD%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd ^(or clients.esd containing it^) in "%BUILD_DIR%"
+  echo ERROR: Missing EditionSpecific-%EDITION% ESD ^(or clients.esd containing it^) in "%BUILD_DIR%"
   echo DEBUG: Listing %BUILD_DIR%
   dir /b "%BUILD_DIR%"
   exit /b 1
@@ -50,6 +51,7 @@ set "LP_ESD=%BUILD_DIR%\Microsoft-Windows-Client-LanguagePack-Package-amd64-en-u
 if not exist "%LP_ESD%" (
   for /f "delims=" %%p in ('dir /b /a:-d "%BUILD_DIR%\*Client-LanguagePack*amd64*en-us*.esd" 2^>nul') do (
     set "LP_ESD=%BUILD_DIR%\%%p"
+    echo Found Language Pack ESD: %%p
   )
 )
 if not exist "%LP_ESD%" (
