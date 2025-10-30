@@ -42,7 +42,7 @@ if not exist "%EDITIONSPEC_ESD%" (
   )
   if not exist "%EDITIONSPEC_ESD%" if exist "%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd" (
     set "EDITIONSPEC_ESD=%BUILD_DIR%\Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd"
-    echo Found EditionSpecific ESD (exact): Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd
+    echo Found EditionSpecific ESD ^(exact^): Microsoft-Windows-EditionSpecific-%EDITION%-Package.esd
   )
 )
 
